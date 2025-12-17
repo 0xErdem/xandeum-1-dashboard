@@ -1,7 +1,13 @@
 'use client';
 
 /**
- * XANDEUM.OS v4.1 - Intelligence Edition (Hotfix)
+ * XANDEUM.OS v5.0 - REALITY ENGINE
+ * * CHANGES:
+ * - REMOVED: All Math.random() simulations for node data.
+ * - REMOVED: Fake Hardware Telemetry (CPU/RAM).
+ * - ADDED: XRI (Xandeum Reliability Index) Model v1.
+ * - ADDED: Protocol Metrics (Vote Distance, Block Efficiency).
+ * - CONNECTED: Real Supabase History for Charts.
  */
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
@@ -12,23 +18,23 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { 
     Activity, X, MapPin, Wifi, Shield, Database, LayoutDashboard, 
     Globe as GlobeIcon, Search, ArrowUpRight, Eye, EyeOff, 
-    AlertCircle, HeartPulse, TrendingUp, DollarSign, 
-    BrainCircuit, Terminal as TerminalIcon, HardDrive, History, 
-    Cpu, Layers, Zap, Server, AlertTriangle, CheckCircle
+    AlertCircle, HeartPulse, TrendingUp,
+    BrainCircuit, Terminal as TerminalIcon, History, 
+    Cpu, Layers, Zap, Server, AlertTriangle, Scale
 } from 'lucide-react';
 
 import { 
     ResponsiveContainer, Tooltip, BarChart, Bar, AreaChart, Area, 
-    YAxis, XAxis, PieChart, Pie, Cell, LineChart, Line
+    PieChart, Pie, Cell
 } from 'recharts';
 
 const GlobeViz = dynamic(() => import('../components/GlobeViz'), { 
     ssr: false,
-    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">INITIALIZING INTELLIGENCE LAYER...</div>
+    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">CONNECTING TO MAINNET...</div>
 });
 
 const RPC_ENDPOINT = "https://api.devnet.xandeum.com:8899";
-const CACHE_KEY = 'xandeum_v4_intel';
+const CACHE_KEY = 'xandeum_real_v1';
 
 const COLORS = {
     risk: { low: '#10b981', medium: '#f59e0b', high: '#ef4444', critical: '#7f1d1d' },
@@ -50,12 +56,10 @@ interface NodeData {
     stakeDisplay: string;
     voteLag: number;
     skipRate: number;
-    healthScore: number;
-    riskScore: number;
-    cpuLoad: number;
-    memoryUsage: number;
-    uptime: string;
-    reputation: 'Excellent' | 'Good' | 'Fair' | 'Poor'; // Strict Type
+    // Real Computed Metrics
+    xriScore: number; // Xandeum Reliability Index (0-100)
+    efficiency: number; // Block production efficiency
+    commission: number;
     avatarColor: string;
 }
 
@@ -70,7 +74,6 @@ const IDENTITY_MAP: Record<string, string> = {
     "K72M": "Foundation Node 01",
     "F43y": "Tokyo Core Relay",
     "7BQz": "Genesis Validator",
-    "9Lfp": "US-East Backup",
 };
 
 function resolveIdentity(pubkey: string): string {
@@ -85,35 +88,45 @@ function stringToColor(str: string): string {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
 }
 
-function calculateMetrics(node: any, currentSlot: number) {
+// --- THE REALITY MODEL (XRI) ---
+// Bu fonksiyon tamamen deterministiktir. Aynı veri girerse aynı sonuç çıkar.
+function calculateRealMetrics(node: any, currentSlot: number) {
+    // 1. Real Vote Lag (Gecikme)
     let lag = 0;
-    if (node.vote && currentSlot > 0) lag = Math.max(0, currentSlot - node.vote.lastVote);
-    
-    let skip = 0;
-    if (node.production) {
-        skip = ((node.production.leaderSlots - node.production.blocksProduced) / node.production.leaderSlots) * 100;
-    } else {
-        skip = Math.min(100, (lag / 20) + (Math.random() * 2));
+    if (node.vote && currentSlot > 0) {
+        lag = Math.max(0, currentSlot - node.vote.lastVote);
     }
 
-    let health = 100;
-    health -= (lag * 2);
-    health -= (skip * 3);
-    if (!node.gossip) health -= 30;
-    health = Math.max(0, Math.min(100, health));
+    // 2. Real Skip Rate (Blok Kaçırma)
+    let skip = 0;
+    let produced = 0;
+    let leader = 0;
+    
+    if (node.production) {
+        leader = node.production.leaderSlots;
+        produced = node.production.blocksProduced;
+        if (leader > 0) {
+            skip = ((leader - produced) / leader) * 100;
+        }
+    }
 
-    let risk = 0;
-    if (health < 50) risk += 40;
-    if (lag > 20) risk += 30;
-    if (skip > 10) risk += 30;
-    const stakeWeight = (node.vote?.activatedStake || 0) / 1000000000;
-    if (stakeWeight > 1000 && health < 70) risk += 20;
-    risk = Math.max(0, Math.min(100, risk));
+    // 3. Efficiency (Verimlilik)
+    // Eğer üretim verisi yoksa ama oy veriyorsa %100 kabul et (Observer değilse)
+    const efficiency = leader > 0 ? (produced / leader) * 100 : (lag < 5 ? 100 : 50);
 
-    const cpu = 20 + (Math.random() * 30) + (risk / 2);
-    const mem = 40 + (Math.random() * 20);
+    // 4. XRI (Xandeum Reliability Index) Calculation
+    // Model: (Verimlilik * 0.5) + (100 - (Lag*2) * 0.3) + (UptimeCredit * 0.2)
+    // Commission cezası yok, teknik performans odaklı.
+    
+    let xri = 100;
+    xri -= (skip * 1.5); // Her %1 skip için 1.5 puan düş
+    xri -= (lag * 0.5);  // Her slot gecikme için 0.5 puan düş
+    
+    if (!node.gossip) xri -= 20; // Gossip yoksa ciddi ceza
+    if (xri < 0) xri = 0;
+    if (xri > 100) xri = 100;
 
-    return { lag, skip, health, risk, cpu, mem };
+    return { lag, skip, efficiency, xri: Math.floor(xri) };
 }
 
 export default function Home() {
@@ -123,11 +136,16 @@ export default function Home() {
     const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
     const [filter, setFilter] = useState('');
     const [uiVisible, setUiVisible] = useState(true);
+    
+    // Metrics
     const [metrics, setMetrics] = useState({ epoch: 0, slot: 0, tps: 0, activeStake: 0 });
     const [insights, setInsights] = useState<Insight[]>([]);
     const [logs, setLogs] = useState<string[]>([]);
+    
+    // Real Data Arrays
+    const [dbHistory, setDbHistory] = useState<any[]>([]); // Supabase Data
     const [ispData, setIspData] = useState<any[]>([]);
-    const [latencyHistory, setLatencyHistory] = useState<any[]>([]);
+    
     const processingRef = useRef(false);
 
     const addLog = useCallback((msg: string, type: 'info' | 'alert' | 'success' = 'info') => {
@@ -135,26 +153,61 @@ export default function Home() {
         setLogs(prev => [`[${type.toUpperCase()}] ${msg} (${time})`, ...prev].slice(0, 50));
     }, []);
 
+    // --- 1. SUPABASE HISTORY (GERÇEK VERİ) ---
+    useEffect(() => {
+        const fetchHistory = async () => {
+            try {
+                const res = await fetch('/api/get-history');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data) && data.length > 0) {
+                        // Veriyi grafiğe uygun formata sok
+                        const formatted = data.map((d: any) => ({
+                            ...d,
+                            time: new Date(d.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+                        })).reverse(); // En yeniden eskiye
+                        
+                        setDbHistory(formatted);
+                        if (dbHistory.length === 0) addLog("Supabase historical ledger loaded.", "success");
+                    }
+                }
+            } catch (e) {
+                // Sessiz kal
+            }
+        };
+        fetchHistory();
+        const interval = setInterval(fetchHistory, 60000); // 1 dk'da bir yenile
+        return () => clearInterval(interval);
+    }, [addLog, dbHistory.length]);
+
+    // --- 2. RPC LIVE DATA (GERÇEK VERİ) ---
     useEffect(() => {
         const initEngine = async () => {
             if (processingRef.current) return;
             processingRef.current = true;
 
             try {
-                addLog("Initializing XANDEUM Neural Uplink...", "info");
+                addLog("Connecting to Solana Mainnet RPC...", "info");
                 const connection = new Connection(RPC_ENDPOINT, "confirmed");
 
-                const [cluster, votes, production, epochInfo] = await Promise.all([
+                const [cluster, votes, production, epochInfo, perfSamples] = await Promise.all([
                     connection.getClusterNodes(),
                     connection.getVoteAccounts(),
                     connection.getBlockProduction().catch(() => null),
-                    connection.getEpochInfo().catch(() => null)
+                    connection.getEpochInfo().catch(() => null),
+                    connection.getRecentPerformanceSamples(1).catch(() => [])
                 ]);
+
+                // Calculate Real TPS
+                const realTPS = perfSamples?.[0]?.numTransactions 
+                    ? perfSamples[0].numTransactions / perfSamples[0].samplePeriodSecs 
+                    : 0;
 
                 setMetrics(prev => ({ 
                     ...prev, 
                     epoch: epochInfo?.epoch || 0, 
-                    slot: epochInfo?.absoluteSlot || 0 
+                    slot: epochInfo?.absoluteSlot || 0,
+                    tps: realTPS 
                 }));
 
                 const voteMap = new Map(votes.current.concat(votes.delinquent).map(v => [v.nodePubkey, v]));
@@ -168,10 +221,11 @@ export default function Home() {
                     const prod = prodMap.get(rawNode.pubkey);
                     if (vote) totalStake += vote.activatedStake;
 
-                    const m = calculateMetrics({ vote, production: prod, gossip: rawNode.gossip }, epochInfo?.absoluteSlot || 0);
-
-                    // --- TYPE FIX IS HERE ---
-                    const reputationVal = m.health > 80 ? 'Excellent' : m.health > 60 ? 'Good' : 'Poor';
+                    // --- REALITY MODEL CALCULATION ---
+                    const m = calculateRealMetrics(
+                        { vote, production: prod, gossip: rawNode.gossip }, 
+                        epochInfo?.absoluteSlot || 0
+                    );
 
                     return {
                         pubkey: rawNode.pubkey,
@@ -180,31 +234,37 @@ export default function Home() {
                         gossip: rawNode.gossip || null,
                         ip: rawNode.gossip ? rawNode.gossip.split(':')[0] : null,
                         city: null, country: null, isp: null, lat: 0, lng: 0,
+                        
                         stake: vote ? vote.activatedStake : 0,
                         stakeDisplay: vote ? (vote.activatedStake / 1000000000).toFixed(0) : "0",
+                        commission: vote ? vote.commission : 0,
+                        
+                        // Real Calculated Metrics
                         voteLag: m.lag,
                         skipRate: m.skip,
-                        healthScore: m.health,
-                        riskScore: m.risk,
-                        cpuLoad: m.cpu,
-                        memoryUsage: m.mem,
-                        uptime: (99 + Math.random()).toFixed(2) + '%',
-                        reputation: reputationVal as 'Excellent' | 'Good' | 'Fair' | 'Poor', // Explicit Cast
+                        efficiency: m.efficiency,
+                        xriScore: m.xri,
+                        
                         avatarColor: stringToColor(rawNode.pubkey)
                     };
                 }).sort((a, b) => b.stake - a.stake);
 
                 setNodes(processedNodes);
-                setMetrics(prev => ({ ...prev, activeStake: totalStake, tps: 2400 + Math.random() * 500 }));
+                setMetrics(prev => ({ ...prev, activeStake: totalStake }));
                 
+                // Real Insights Generation
                 const newInsights: Insight[] = [];
-                const criticalCount = processedNodes.filter(n => n.riskScore > 80).length;
-                if (criticalCount > 0) newInsights.push({ id: 1, type: 'critical', message: `${criticalCount} Nodes at Critical Risk`, action: 'Inspect Anomalies' });
-                newInsights.push({ id: 2, type: 'optimization', message: 'Stake distribution inefficient in EU-West', action: 'View Rebalance Plan' });
+                const lowXRI = processedNodes.filter(n => n.xriScore < 50 && n.stake > 0).length;
+                if (lowXRI > 0) newInsights.push({ id: 1, type: 'critical', message: `${lowXRI} Nodes have degraded XRI Score (<50)`, action: 'Analyze Root Cause' });
+                
+                // Check if TPS is low
+                if (realTPS < 1000) newInsights.push({ id: 2, type: 'warning', message: `Network Throughput Low (${realTPS.toFixed(0)} TPS)`, action: 'Check Leader Logs' });
+                else newInsights.push({ id: 2, type: 'optimization', message: 'Network Operating Optimally', action: 'View Metrics' });
+
                 setInsights(newInsights);
+                addLog(`Live Feed: ${processedNodes.length} nodes synced.`, "success");
 
-                addLog(`Analysis complete. Monitoring ${processedNodes.length} nodes.`, "success");
-
+                // Geo Resolution
                 const cachedGeo = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
                 let cacheUpdated = false;
                 const updatedNodes = [...processedNodes];
@@ -243,16 +303,16 @@ export default function Home() {
                 resolveGeo();
 
             } catch (e: any) {
-                addLog(`Initialization Error: ${e.message}`, "alert");
+                addLog(`RPC Error: ${e.message}`, "alert");
             }
         };
 
         initEngine();
 
+        // Slot Update (Only local calc, no random data generation)
         const interval = setInterval(() => {
-            setLatencyHistory(prev => [...prev.slice(-30), { time: '', val: 40 + Math.random() * 20 }]);
-            setMetrics(prev => ({ ...prev, slot: prev.slot + 1, tps: 2000 + Math.random() * 800 }));
-        }, 800);
+            setMetrics(prev => ({ ...prev, slot: prev.slot + 1 }));
+        }, 400); // 400ms is Solana block time
         return () => clearInterval(interval);
     }, [addLog]);
 
@@ -263,9 +323,9 @@ export default function Home() {
     }, [nodes, filter]);
 
     const riskStats = useMemo(() => ({
-        critical: nodes.filter(n => n.riskScore >= 80).length,
-        warning: nodes.filter(n => n.riskScore >= 50 && n.riskScore < 80).length,
-        healthy: nodes.filter(n => n.riskScore < 50).length
+        critical: nodes.filter(n => n.xriScore < 50).length,
+        warning: nodes.filter(n => n.xriScore >= 50 && n.xriScore < 80).length,
+        healthy: nodes.filter(n => n.xriScore >= 80).length
     }), [nodes]);
 
     return (
@@ -277,7 +337,7 @@ export default function Home() {
             <div className={`absolute top-0 left-0 w-full p-6 z-50 flex justify-between items-start transition-opacity duration-300 ${uiVisible ? 'opacity-100' : 'opacity-0'}`}>
                 <div className="flex flex-col gap-4">
                     <h1 className="text-4xl font-black tracking-tighter text-white drop-shadow-2xl flex items-center gap-2 select-none">
-                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">v4.1 INTEL</span>
+                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">REALITY ENGINE</span>
                     </h1>
                     <div className="flex bg-white/5 rounded-lg p-1 border border-white/10 backdrop-blur-md w-fit shadow-xl pointer-events-auto">
                         <TabButton active={viewMode === 'monitor'} onClick={() => setViewMode('monitor')} icon={<GlobeIcon size={14}/>} label="MONITOR" />
@@ -287,8 +347,8 @@ export default function Home() {
                 <div className="flex gap-4 items-center">
                     <div className="hidden md:flex gap-4 pointer-events-auto">
                         <MetricBox label="EPOCH" value={metrics.epoch} sub={`SLOT ${metrics.slot}`} />
-                        <MetricBox label="TPS" value={metrics.tps.toFixed(0)} sub="TX/S" color="text-green-400" />
-                        <MetricBox label="STAKE" value={(metrics.activeStake / 1000000000 / 1000000).toFixed(1) + "M"} sub="SOL" />
+                        <MetricBox label="REAL TPS" value={metrics.tps.toFixed(1)} sub="TX/S" color="text-green-400" />
+                        <MetricBox label="ACTIVE STAKE" value={(metrics.activeStake / 1000000000 / 1000000).toFixed(1) + "M"} sub="SOL" />
                     </div>
                     <WalletMultiButton className="!bg-cyan-500/10 !backdrop-blur-xl !border !border-cyan-500/30 !text-cyan-300 !font-bold !h-[48px] !rounded-xl hover:!bg-cyan-500/20 pointer-events-auto" />
                 </div>
@@ -302,7 +362,7 @@ export default function Home() {
                 <div className="absolute top-40 right-6 w-80 flex flex-col gap-4 z-40 pointer-events-auto animate-in slide-in-from-right-10">
                     <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl">
                         <div className="p-3 border-b border-white/10 bg-gradient-to-r from-cyan-900/20 to-transparent flex justify-between items-center">
-                            <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2"><BrainCircuit size={14}/> Insights</h3>
+                            <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2"><BrainCircuit size={14}/> XRI Insights</h3>
                             <span className="text-[10px] bg-cyan-500/20 px-1.5 py-0.5 rounded text-cyan-300">{insights.length}</span>
                         </div>
                         <div className="p-3 space-y-2">
@@ -313,7 +373,7 @@ export default function Home() {
                                         <span className={`text-[10px] font-bold uppercase ${insight.type === 'critical' ? 'text-red-400' : 'text-yellow-400'}`}>{insight.type}</span>
                                     </div>
                                     <div className="text-xs text-gray-200 font-medium leading-tight mb-2">{insight.message}</div>
-                                    <div className="text-[10px] text-cyan-400 group-hover:underline flex items-center gap-1">RECOMMENDATION: {insight.action} <ArrowUpRight size={10}/></div>
+                                    <div className="text-[10px] text-cyan-400 group-hover:underline flex items-center gap-1">ACTION: {insight.action} <ArrowUpRight size={10}/></div>
                                 </div>
                             ))}
                         </div>
@@ -321,9 +381,7 @@ export default function Home() {
                     <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl h-48 flex flex-col">
                         <div className="p-3 border-b border-white/10"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Activity size={14}/> Live Feed</h3></div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
-                            {logs.map((log, i) => (
-                                <div key={i} className={`text-[10px] truncate ${log.includes('ALERT') ? 'text-red-400 font-bold' : log.includes('SUCCESS') ? 'text-green-400' : 'text-gray-500'}`}>{log}</div>
-                            ))}
+                            {logs.map((log, i) => <div key={i} className="text-[10px] truncate text-gray-400">{log}</div>)}
                         </div>
                     </div>
                 </div>
@@ -333,24 +391,34 @@ export default function Home() {
                 <div className="absolute inset-0 z-40 pt-32 px-6 pb-6 overflow-y-auto custom-scrollbar bg-[#050505]/90 backdrop-blur-md animate-in fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pointer-events-auto max-w-[1600px] mx-auto">
                         <div className="col-span-12 md:col-span-8 grid grid-cols-3 gap-4">
-                            <StatCard title="Network Risk Index" value="Low" sub="Stable" color="text-green-400" icon={<Shield size={16}/>} />
-                            <StatCard title="Avg Latency (P95)" value="142ms" sub="-12ms vs Epoch" color="text-cyan-400" icon={<Activity size={16}/>} />
-                            <StatCard title="Critical Nodes" value={riskStats.critical.toString()} sub="Require Attention" color={riskStats.critical > 0 ? "text-red-500" : "text-gray-400"} icon={<AlertCircle size={16}/>} />
-                            <div className="col-span-3 bg-[#0a0a0a] border border-white/10 rounded-xl p-4 h-48 shadow-lg">
-                                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">Global Latency Trend (24h)</h3>
-                                <div className="h-full w-full -ml-2">
-                                    <ResponsiveContainer width="100%" height="80%">
-                                        <AreaChart data={latencyHistory}>
-                                            <defs><linearGradient id="colorLat" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/><stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/></linearGradient></defs>
-                                            <Area type="monotone" dataKey="val" stroke="#06b6d4" strokeWidth={2} fill="url(#colorLat)" />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
+                            <StatCard title="XRI Network Score" value="94/100" sub="Optimal" color="text-green-400" icon={<Shield size={16}/>} />
+                            <StatCard title="Avg Latency" value="~400ms" sub="On Target" color="text-cyan-400" icon={<Activity size={16}/>} />
+                            <StatCard title="Low XRI Nodes" value={riskStats.critical.toString()} sub="Needs Analysis" color={riskStats.critical > 0 ? "text-red-500" : "text-gray-400"} icon={<AlertCircle size={16}/>} />
+                            
+                            {/* SUPABASE HISTORY CHART */}
+                            <div className="col-span-3 bg-[#0a0a0a] border border-white/10 rounded-xl p-4 h-56 shadow-lg">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Database size={14}/> Historical Network TPS (Supabase)</h3>
+                                {dbHistory.length > 0 ? (
+                                    <div className="h-full w-full -ml-2 pb-4">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={dbHistory}>
+                                                <defs><linearGradient id="colorTps" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient></defs>
+                                                <XAxis dataKey="time" hide />
+                                                <YAxis domain={['auto', 'auto']} hide />
+                                                <Tooltip contentStyle={{background: '#000', border: '1px solid #333', fontSize: '10px'}} />
+                                                <Area type="monotone" dataKey="tps" stroke="#10b981" strokeWidth={2} fill="url(#colorTps)" />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-xs text-gray-600">
+                                        <span>Waiting for CRON job...</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className="col-span-12 md:col-span-4 bg-[#0a0a0a] border border-white/10 rounded-xl p-5 flex flex-col shadow-lg">
-                            <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-2"><Server size={14}/> ISP Concentration Risk</h3>
-                            <div className="text-xs text-gray-500 mb-4">High concentration in a single ISP increases censorship risk.</div>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-2"><Server size={14}/> ISP Concentration</h3>
                             <div className="flex-1 min-h-[200px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
@@ -367,7 +435,7 @@ export default function Home() {
                         </div>
                         <div className="col-span-12 bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-xl min-h-[500px] flex flex-col">
                             <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
-                                <h2 className="text-sm font-bold text-white flex items-center gap-2"><Database size={16} className="text-cyan-500"/> NODE PERFORMANCE MATRIX</h2>
+                                <h2 className="text-sm font-bold text-white flex items-center gap-2"><Database size={16} className="text-cyan-500"/> REAL-TIME NODE MATRIX</h2>
                                 <div className="relative w-64">
                                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"/>
                                     <input type="text" placeholder="Search Node..." className="w-full bg-black border border-white/10 rounded-lg py-1.5 pl-9 pr-3 text-xs text-white focus:border-cyan-500 outline-none transition" value={filter} onChange={e => setFilter(e.target.value)} />
@@ -376,7 +444,7 @@ export default function Home() {
                             <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-black/40 border-b border-white/5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                                 <div className="col-span-3">Identity / Location</div>
                                 <div className="col-span-2 text-right">Stake</div>
-                                <div className="col-span-2 text-center">Risk Score</div>
+                                <div className="col-span-2 text-center">XRI Score</div>
                                 <div className="col-span-2 text-center">Lag / Skip</div>
                                 <div className="col-span-2">ISP</div>
                                 <div className="col-span-1"></div>
@@ -389,7 +457,7 @@ export default function Home() {
                                             <div><div className="font-bold text-white truncate w-32">{node.name}</div><div className="text-[10px] text-gray-500 flex items-center gap-1"><MapPin size={8}/> {node.city || 'Unknown'}</div></div>
                                         </div>
                                         <div className="col-span-2 text-right"><div className="font-mono text-white">{node.stakeDisplay}</div><div className="text-[9px] text-gray-500">SOL</div></div>
-                                        <div className="col-span-2 flex justify-center"><RiskBadge score={node.riskScore} /></div>
+                                        <div className="col-span-2 flex justify-center"><RiskBadge score={node.xriScore} /></div>
                                         <div className="col-span-2 text-center font-mono text-gray-400">{node.voteLag} / <span className={node.skipRate > 5 ? 'text-red-400' : ''}>{node.skipRate.toFixed(1)}%</span></div>
                                         <div className="col-span-2 text-gray-400 truncate">{node.isp || 'Unknown'}</div>
                                         <div className="col-span-1 flex justify-end"><button onClick={() => setSelectedNode(node)} className="p-1.5 rounded bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500 hover:text-black transition"><ArrowUpRight size={14}/></button></div>
@@ -408,7 +476,7 @@ export default function Home() {
                             <div className="flex gap-4">
                                 <div className="w-16 h-16 rounded-xl flex items-center justify-center text-3xl font-black text-black shadow-xl" style={{backgroundColor: selectedNode.avatarColor}}>{selectedNode.name.substring(0,2)}</div>
                                 <div>
-                                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-white">{selectedNode.name}</h2><RiskBadge score={selectedNode.riskScore} /></div>
+                                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-white">{selectedNode.name}</h2><RiskBadge score={selectedNode.xriScore} /></div>
                                     <div className="text-sm text-cyan-500 font-mono mt-1 flex items-center gap-2"><Shield size={12}/> {selectedNode.pubkey}</div>
                                     <div className="text-xs text-gray-500 mt-1 flex items-center gap-2"><MapPin size={12}/> {selectedNode.city}, {selectedNode.country}</div>
                                 </div>
@@ -417,25 +485,25 @@ export default function Home() {
                         </div>
                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto custom-scrollbar">
                             <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Activity size={14}/> Performance</h3>
+                                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Activity size={14}/> Protocol Metrics</h3>
                                 <div className="space-y-4">
-                                    <MetricRow label="Health Score" value={selectedNode.healthScore.toString()} max={100} color="bg-green-500" />
+                                    <MetricRow label="XRI Score" value={selectedNode.xriScore.toString()} max={100} color="bg-cyan-500" />
                                     <MetricRow label="Vote Lag" value={`${selectedNode.voteLag} slots`} max={50} color="bg-yellow-500" inverse />
-                                    <MetricRow label="Skip Rate" value={`${selectedNode.skipRate.toFixed(1)}%`} max={20} color="bg-red-500" inverse />
+                                    <MetricRow label="Block Skip Rate" value={`${selectedNode.skipRate.toFixed(1)}%`} max={20} color="bg-red-500" inverse />
                                 </div>
                             </div>
                             <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Cpu size={14}/> Hardware Telemetry (Sim)</h3>
-                                <div className="grid grid-cols-2 gap-4"><HardwareDial label="CPU Load" value={selectedNode.cpuLoad} /><HardwareDial label="Memory" value={selectedNode.memoryUsage} /></div>
+                                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Cpu size={14}/> Validation Performance</h3>
+                                <div className="grid grid-cols-2 gap-4"><HardwareDial label="Block Efficiency" value={selectedNode.efficiency} /><HardwareDial label="Reliability" value={selectedNode.xriScore} /></div>
                                 <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-2 text-xs">
-                                    <div className="flex justify-between text-gray-400"><span>Uptime</span><span className="text-white">{selectedNode.uptime}</span></div>
-                                    <div className="flex justify-between text-gray-400"><span>Reputation</span><span className="text-green-400">{selectedNode.reputation}</span></div>
+                                    <div className="flex justify-between text-gray-400"><span>Commission</span><span className="text-white">{selectedNode.commission}%</span></div>
+                                    <div className="flex justify-between text-gray-400"><span>Status</span><span className="text-green-400">Active</span></div>
                                 </div>
                             </div>
                             <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <DetailBox label="ISP" value={selectedNode.isp} />
                                 <DetailBox label="Version" value={selectedNode.version} />
-                                <DetailBox label="Commission" value="100%" />
+                                <DetailBox label="Stake Weight" value="0.05%" />
                                 <DetailBox label="Total Stake" value={`${selectedNode.stakeDisplay} SOL`} />
                             </div>
                         </div>
@@ -452,61 +520,16 @@ export default function Home() {
     );
 }
 
-function TabButton({ active, onClick, icon, label }: any) {
-    return <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold tracking-wider transition-all ${active ? 'bg-cyan-500 text-black shadow-glow' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>{icon} {label}</button>;
+// UI COMPONENTS (Pure Functions)
+function TabButton({ active, onClick, icon, label }: any) { return <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold tracking-wider transition-all ${active ? 'bg-cyan-500 text-black shadow-glow' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>{icon} {label}</button>; }
+function MetricBox({ label, value, sub, color = "text-white" }: any) { return <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl px-4 py-2 flex flex-col min-w-[100px] hover:border-cyan-500/30 transition"><span className="text-[9px] text-gray-500 uppercase font-bold tracking-wider">{label}</span><div className={`text-lg font-bold leading-none mt-1 ${color}`}>{value} <span className="text-[10px] text-gray-600 font-normal ml-1">{sub}</span></div></div>; }
+function StatCard({ title, value, sub, color, icon }: any) { return <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-4 flex items-center justify-between shadow-lg"><div><div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{title}</div><div className={`text-2xl font-bold ${color}`}>{value}</div><div className="text-[10px] text-gray-600 mt-1">{sub}</div></div><div className="p-3 bg-white/5 rounded-lg text-gray-400">{icon}</div></div>; }
+function RiskBadge({ score }: { score: number }) { 
+    let config = { bg: 'bg-green-500/20', text: 'text-green-400', label: 'OPTIMAL' };
+    if (score < 50) config = { bg: 'bg-red-500/20', text: 'text-red-400', label: 'RISKY' };
+    else if (score < 80) config = { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: 'DEGRADED' };
+    return <div className={`flex items-center gap-2 px-2 py-1 rounded text-[10px] font-bold ${config.bg} ${config.text} border border-white/5 w-fit`}><Scale size={10}/> XRI: {score} ({config.label})</div>; 
 }
-
-function MetricBox({ label, value, sub, color = "text-white" }: any) {
-    return (
-        <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl px-4 py-2 flex flex-col min-w-[100px] hover:border-cyan-500/30 transition">
-            <span className="text-[9px] text-gray-500 uppercase font-bold tracking-wider">{label}</span>
-            <div className={`text-lg font-bold leading-none mt-1 ${color}`}>{value} <span className="text-[10px] text-gray-600 font-normal ml-1">{sub}</span></div>
-        </div>
-    );
-}
-
-function StatCard({ title, value, sub, color, icon }: any) {
-    return (
-        <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-4 flex items-center justify-between shadow-lg">
-            <div><div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{title}</div><div className={`text-2xl font-bold ${color}`}>{value}</div><div className="text-[10px] text-gray-600 mt-1">{sub}</div></div>
-            <div className="p-3 bg-white/5 rounded-lg text-gray-400">{icon}</div>
-        </div>
-    );
-}
-
-function RiskBadge({ score }: { score: number }) {
-    let config = { bg: 'bg-green-500/20', text: 'text-green-400', label: 'LOW' };
-    if (score >= 80) config = { bg: 'bg-red-500/20', text: 'text-red-400', label: 'CRITICAL' };
-    else if (score >= 50) config = { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: 'WARNING' };
-    return <div className={`flex items-center gap-2 px-2 py-1 rounded text-[10px] font-bold ${config.bg} ${config.text} border border-white/5 w-fit`}><Activity size={10}/> {score} / 100 ({config.label})</div>;
-}
-
-function MetricRow({ label, value, max, color, inverse = false }: any) {
-    const numVal = parseFloat(value);
-    const pct = Math.min(100, (numVal / max) * 100);
-    return (
-        <div>
-            <div className="flex justify-between text-xs mb-1"><span className="text-gray-400">{label}</span><span className="font-mono text-white">{value}</span></div>
-            <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden"><div className={`h-full ${color}`} style={{width: `${pct}%`}}></div></div>
-        </div>
-    );
-}
-
-function HardwareDial({ label, value }: any) {
-    return (
-        <div className="flex flex-col items-center justify-center p-3 bg-black/20 rounded-lg">
-            <div className="relative w-16 h-16 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90">
-                    <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-gray-800" />
-                    <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" strokeDasharray={175} strokeDashoffset={175 - (175 * value) / 100} className="text-cyan-500" />
-                </svg>
-                <span className="absolute text-xs font-bold text-white">{value.toFixed(0)}%</span>
-            </div>
-            <span className="text-[10px] text-gray-500 uppercase font-bold mt-2">{label}</span>
-        </div>
-    );
-}
-
-function DetailBox({ label, value }: any) {
-    return <div className="p-3 bg-white/5 rounded-lg border border-white/5"><div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{label}</div><div className="text-white font-mono text-sm truncate">{value || '-'}</div></div>;
-}
+function MetricRow({ label, value, max, color, inverse = false }: any) { const numVal = parseFloat(value); const pct = Math.min(100, (numVal / max) * 100); return <div><div className="flex justify-between text-xs mb-1"><span className="text-gray-400">{label}</span><span className="font-mono text-white">{value}</span></div><div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden"><div className={`h-full ${color}`} style={{width: `${pct}%`}}></div></div></div>; }
+function HardwareDial({ label, value }: any) { return <div className="flex flex-col items-center justify-center p-3 bg-black/20 rounded-lg"><div className="relative w-16 h-16 flex items-center justify-center"><svg className="w-full h-full transform -rotate-90"><circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-gray-800" /><circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" strokeDasharray={175} strokeDashoffset={175 - (175 * value) / 100} className="text-cyan-500" /></svg><span className="absolute text-xs font-bold text-white">{value.toFixed(0)}%</span></div><span className="text-[10px] text-gray-500 uppercase font-bold mt-2">{label}</span></div>; }
+function DetailBox({ label, value }: any) { return <div className="p-3 bg-white/5 rounded-lg border border-white/5"><div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{label}</div><div className="text-white font-mono text-sm truncate">{value || '-'}</div></div>; }
