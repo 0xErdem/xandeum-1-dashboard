@@ -2,21 +2,24 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
-// SSR (Server Side Rendering) Hatasını Önleme
+// SSR Check
 let Globe: any = () => null;
 if (typeof window !== 'undefined') {
     Globe = require('react-globe.gl').default;
 }
 
-// TİP TANIMLAMALARI (Null hatalarını önlemek için güncellendi)
 interface Node {
     pubkey: string;
     lat: number;
     lng: number;
-    city?: string | null;  // null olabilir
-    country?: string | null; // null olabilir
-    isp?: string | null;     // null olabilir
-    healthScore: number;
+    city?: string | null;
+    country?: string | null;
+    isp?: string | null;
+    
+    // GÜNCELLEME: İsim değişikliği ve opsiyonel yapma
+    xriScore?: number;    // Yeni modeldeki isim
+    healthScore?: number; // Eski model desteği (gerekirse)
+    
     avatarColor: string;
 }
 
@@ -45,10 +48,8 @@ export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
 
     useEffect(() => {
         if (globeEl.current) {
-            // Harita kontrolleri
             globeEl.current.controls().autoRotate = true;
             globeEl.current.controls().autoRotateSpeed = 0.5;
-            // Açılışta biraz daha uzaktan bak
             globeEl.current.pointOfView({ lat: 20, lng: 0, altitude: 2.0 });
         }
     }, [mounted]);
@@ -61,38 +62,36 @@ export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
             width={dimensions.width}
             height={dimensions.height}
             
-            // --- GÖRSEL AYARLAR (AYDINLIK MOD) ---
-            // Daha net görünen "Blue Marble" kaplaması
+            // Visuals
             globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
             bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-            // Arka planı tamamen şeffaf yapıyoruz (CSS ile halledeceğiz)
             backgroundColor="rgba(0,0,0,0)"
             
-            // ATMOSFER & IŞIK (Karanlığı önlemek için)
+            // Atmosphere
             atmosphereColor="#7caeea"
             atmosphereAltitude={0.15}
-            ambientLightColor="#ffffff" // Beyaz ortam ışığı
-            ambientLightIntensity={1.2} // Işık şiddetini artırdık
+            ambientLightColor="#ffffff"
+            ambientLightIntensity={1.2}
             
-            // --- DATA NOKTALARI ---
+            // Points
             pointsData={nodes}
             pointLat="lat"
             pointLng="lng"
             pointColor="avatarColor"
-            pointAltitude={0.1} // Noktalar haritaya gömülmesin diye yükselttik
+            pointAltitude={0.1}
             pointRadius={0.5}
-            pointsMerge={true} // Performans için
+            pointsMerge={true}
             
-            // --- HALKALAR (SİNYAL EFEKTİ) ---
+            // Rings
             ringsData={nodes}
             ringLat="lat"
             ringLng="lng"
-            ringColor={() => '#38bdf8'} // Açık mavi halkalar
+            ringColor={() => '#38bdf8'}
             ringMaxRadius={2}
             ringPropagationSpeed={3}
             ringRepeatPeriod={800}
             
-            // --- ETİKETLER ---
+            // Labels
             labelsData={nodes}
             labelLat="lat"
             labelLng="lng"
@@ -103,7 +102,6 @@ export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
             labelResolution={2}
             labelAltitude={0.05}
 
-            // --- ETKİLEŞİM ---
             onPointClick={onNodeClick}
             onLabelClick={onNodeClick}
         />
