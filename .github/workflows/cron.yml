@@ -1,0 +1,15 @@
+name: Data Snapshot Cron
+
+on:
+  schedule:
+    # Her 15 dakikada bir çalıştır (GitHub limiti en az 5 dkdır, 15 güvenlidir)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Elle tetiklemek için buton ekler
+
+jobs:
+  ping-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call API Endpoint
+        run: |
+          curl -X GET https://xandeum-os-dashboard.vercel.app/api/record-snapshot
