@@ -1,13 +1,7 @@
 'use client';
 
 /**
- * XANDEUM.OS v4.0 - Product Architecture Implementation
- * * Features Implemented:
- * 1. Advanced Analytics Layer (Risk Scoring, Stake-Weighted Health)
- * 2. Anomaly Detection (Visualized via Risk Score)
- * 3. Node Drill-Down Views (Hardware Simulation, Deep Metrics)
- * 4. Network-Level Intelligence (ISP Concentration, Nakamoto Simulation)
- * 5. Actionable Insights (Recommendation Engine)
+ * XANDEUM.OS v4.1 - Intelligence Edition (Hotfix)
  */
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
@@ -28,13 +22,11 @@ import {
     YAxis, XAxis, PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
 
-// --- VISUALIZATION COMPONENTS ---
 const GlobeViz = dynamic(() => import('../components/GlobeViz'), { 
     ssr: false,
     loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">INITIALIZING INTELLIGENCE LAYER...</div>
 });
 
-// --- CONFIGURATION ---
 const RPC_ENDPOINT = "https://api.devnet.xandeum.com:8899";
 const CACHE_KEY = 'xandeum_v4_intel';
 
@@ -43,7 +35,6 @@ const COLORS = {
     brand: { primary: '#06b6d4', secondary: '#3b82f6', dark: '#02040a' }
 };
 
-// --- TYPES ---
 interface NodeData {
     pubkey: string;
     name: string;
@@ -55,21 +46,16 @@ interface NodeData {
     isp: string | null;
     lat: number;
     lng: number;
-    
-    // Performance Metrics
-    stake: number; // Raw lamports
+    stake: number;
     stakeDisplay: string;
-    voteLag: number; // Slots behind
-    skipRate: number; // %
-    healthScore: number; // 0-100
-    riskScore: number; // 0-100 (High is bad)
-    
-    // Simulated Hardware/Deep Metrics
+    voteLag: number;
+    skipRate: number;
+    healthScore: number;
+    riskScore: number;
     cpuLoad: number;
     memoryUsage: number;
     uptime: string;
-    reputation: 'Excellent' | 'Good' | 'Fair' | 'Poor';
-    
+    reputation: 'Excellent' | 'Good' | 'Fair' | 'Poor'; // Strict Type
     avatarColor: string;
 }
 
@@ -80,9 +66,6 @@ interface Insight {
     action: string;
 }
 
-// --- LOGIC ENGINE ---
-
-// Identity Resolver
 const IDENTITY_MAP: Record<string, string> = {
     "K72M": "Foundation Node 01",
     "F43y": "Tokyo Core Relay",
@@ -102,77 +85,56 @@ function stringToColor(str: string): string {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
 }
 
-// Advanced Scoring Algorithm
 function calculateMetrics(node: any, currentSlot: number) {
-    // 1. Lag Calculation
     let lag = 0;
     if (node.vote && currentSlot > 0) lag = Math.max(0, currentSlot - node.vote.lastVote);
     
-    // 2. Skip Rate Simulation (if no block production data)
     let skip = 0;
     if (node.production) {
         skip = ((node.production.leaderSlots - node.production.blocksProduced) / node.production.leaderSlots) * 100;
     } else {
-        skip = Math.min(100, (lag / 20) + (Math.random() * 2)); // Simulated based on lag
+        skip = Math.min(100, (lag / 20) + (Math.random() * 2));
     }
 
-    // 3. Health Score (Higher is Better)
     let health = 100;
     health -= (lag * 2);
     health -= (skip * 3);
     if (!node.gossip) health -= 30;
     health = Math.max(0, Math.min(100, health));
 
-    // 4. Risk Score (Higher is Bad) - "Anomaly Detection" Logic
     let risk = 0;
     if (health < 50) risk += 40;
     if (lag > 20) risk += 30;
     if (skip > 10) risk += 30;
-    // Stake Weighting: High stake + Low health = CRITICAL RISK
-    const stakeWeight = (node.vote?.activatedStake || 0) / 1000000000; // Normalized
-    if (stakeWeight > 1000 && health < 70) risk += 20; // Penalty for big nodes failing
-    
+    const stakeWeight = (node.vote?.activatedStake || 0) / 1000000000;
+    if (stakeWeight > 1000 && health < 70) risk += 20;
     risk = Math.max(0, Math.min(100, risk));
 
-    // 5. Simulated Hardware
-    const cpu = 20 + (Math.random() * 30) + (risk / 2); // Risk correlates with load
+    const cpu = 20 + (Math.random() * 30) + (risk / 2);
     const mem = 40 + (Math.random() * 20);
 
     return { lag, skip, health, risk, cpu, mem };
 }
 
-// ============================================================================
-// MAIN COMPONENT
-// ============================================================================
-
 export default function Home() {
     const { publicKey } = useWallet();
-
-    // --- STATE ---
-    const [viewMode, setViewMode] = useState<'monitor' | 'analyst'>('monitor'); // Renamed for "Product" feel
+    const [viewMode, setViewMode] = useState<'monitor' | 'analyst'>('monitor');
     const [nodes, setNodes] = useState<NodeData[]>([]);
     const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
     const [filter, setFilter] = useState('');
     const [uiVisible, setUiVisible] = useState(true);
-
-    // Metrics & Intelligence
     const [metrics, setMetrics] = useState({ epoch: 0, slot: 0, tps: 0, activeStake: 0 });
     const [insights, setInsights] = useState<Insight[]>([]);
     const [logs, setLogs] = useState<string[]>([]);
-    
-    // Charts Data
     const [ispData, setIspData] = useState<any[]>([]);
     const [latencyHistory, setLatencyHistory] = useState<any[]>([]);
-
     const processingRef = useRef(false);
 
-    // --- SYSTEM LOGGING ---
     const addLog = useCallback((msg: string, type: 'info' | 'alert' | 'success' = 'info') => {
         const time = new Date().toLocaleTimeString([], {hour12: false});
         setLogs(prev => [`[${type.toUpperCase()}] ${msg} (${time})`, ...prev].slice(0, 50));
     }, []);
 
-    // --- 1. INTELLIGENCE ENGINE (DATA PROCESSING) ---
     useEffect(() => {
         const initEngine = async () => {
             if (processingRef.current) return;
@@ -182,7 +144,6 @@ export default function Home() {
                 addLog("Initializing XANDEUM Neural Uplink...", "info");
                 const connection = new Connection(RPC_ENDPOINT, "confirmed");
 
-                // Fetch Raw Data
                 const [cluster, votes, production, epochInfo] = await Promise.all([
                     connection.getClusterNodes(),
                     connection.getVoteAccounts(),
@@ -196,24 +157,21 @@ export default function Home() {
                     slot: epochInfo?.absoluteSlot || 0 
                 }));
 
-                // Map Data
                 const voteMap = new Map(votes.current.concat(votes.delinquent).map(v => [v.nodePubkey, v]));
                 const prodMap = new Map(Object.entries(production?.value.byIdentity || {}));
                 
                 let totalStake = 0;
                 let ispCounts: Record<string, number> = {};
 
-                // Process Nodes
                 const processedNodes: NodeData[] = cluster.map(rawNode => {
                     const vote = voteMap.get(rawNode.pubkey);
                     const prod = prodMap.get(rawNode.pubkey);
-                    
                     if (vote) totalStake += vote.activatedStake;
 
-                    const m = calculateMetrics(
-                        { vote, production: prod, gossip: rawNode.gossip }, 
-                        epochInfo?.absoluteSlot || 0
-                    );
+                    const m = calculateMetrics({ vote, production: prod, gossip: rawNode.gossip }, epochInfo?.absoluteSlot || 0);
+
+                    // --- TYPE FIX IS HERE ---
+                    const reputationVal = m.health > 80 ? 'Excellent' : m.health > 60 ? 'Good' : 'Poor';
 
                     return {
                         pubkey: rawNode.pubkey,
@@ -221,20 +179,17 @@ export default function Home() {
                         version: rawNode.version || 'Unknown',
                         gossip: rawNode.gossip || null,
                         ip: rawNode.gossip ? rawNode.gossip.split(':')[0] : null,
-                        city: null, country: null, isp: null, lat: 0, lng: 0, // Filled by Geo
-                        
+                        city: null, country: null, isp: null, lat: 0, lng: 0,
                         stake: vote ? vote.activatedStake : 0,
                         stakeDisplay: vote ? (vote.activatedStake / 1000000000).toFixed(0) : "0",
                         voteLag: m.lag,
                         skipRate: m.skip,
                         healthScore: m.health,
                         riskScore: m.risk,
-                        
                         cpuLoad: m.cpu,
                         memoryUsage: m.mem,
                         uptime: (99 + Math.random()).toFixed(2) + '%',
-                        reputation: m.health > 80 ? 'Excellent' : m.health > 60 ? 'Good' : 'Poor',
-                        
+                        reputation: reputationVal as 'Excellent' | 'Good' | 'Fair' | 'Poor', // Explicit Cast
                         avatarColor: stringToColor(rawNode.pubkey)
                     };
                 }).sort((a, b) => b.stake - a.stake);
@@ -242,18 +197,14 @@ export default function Home() {
                 setNodes(processedNodes);
                 setMetrics(prev => ({ ...prev, activeStake: totalStake, tps: 2400 + Math.random() * 500 }));
                 
-                // Generate Initial Insights based on analysis
                 const newInsights: Insight[] = [];
                 const criticalCount = processedNodes.filter(n => n.riskScore > 80).length;
-                if (criticalCount > 0) {
-                    newInsights.push({ id: 1, type: 'critical', message: `${criticalCount} Nodes at Critical Risk`, action: 'Inspect Anomalies' });
-                }
+                if (criticalCount > 0) newInsights.push({ id: 1, type: 'critical', message: `${criticalCount} Nodes at Critical Risk`, action: 'Inspect Anomalies' });
                 newInsights.push({ id: 2, type: 'optimization', message: 'Stake distribution inefficient in EU-West', action: 'View Rebalance Plan' });
                 setInsights(newInsights);
 
                 addLog(`Analysis complete. Monitoring ${processedNodes.length} nodes.`, "success");
 
-                // --- GEO RESOLUTION (Throttled & Cached) ---
                 const cachedGeo = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
                 let cacheUpdated = false;
                 const updatedNodes = [...processedNodes];
@@ -265,22 +216,17 @@ export default function Home() {
 
                         if (cachedGeo[n.ip]) {
                             Object.assign(updatedNodes[i], cachedGeo[n.ip]);
-                            
-                            // ISP Data Aggregation
                             const isp = cachedGeo[n.ip].isp || 'Unknown';
-                            ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000); // Stake weighted
+                            ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000);
                             continue;
                         }
 
                         try {
-                            await new Promise(r => setTimeout(r, 200)); // Politeness delay
+                            await new Promise(r => setTimeout(r, 200));
                             const res = await fetch(`https://ipwho.is/${n.ip}`);
                             const data = await res.json();
                             if (data.success) {
-                                const geoInfo = { 
-                                    city: data.city, country: data.country, isp: data.connection?.isp, 
-                                    lat: data.latitude, lng: data.longitude 
-                                };
+                                const geoInfo = { city: data.city, country: data.country, isp: data.connection?.isp, lat: data.latitude, lng: data.longitude };
                                 cachedGeo[n.ip] = geoInfo;
                                 Object.assign(updatedNodes[i], geoInfo);
                                 cacheUpdated = true;
@@ -291,11 +237,7 @@ export default function Home() {
                     if (cacheUpdated) localStorage.setItem(CACHE_KEY, JSON.stringify(cachedGeo));
                     setNodes([...updatedNodes]);
 
-                    // Update ISP Chart
-                    const sortedIsp = Object.entries(ispCounts)
-                        .map(([name, value]) => ({ name, value }))
-                        .sort((a, b) => b.value - a.value)
-                        .slice(0, 5);
+                    const sortedIsp = Object.entries(ispCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
                     setIspData(sortedIsp);
                 };
                 resolveGeo();
@@ -307,55 +249,41 @@ export default function Home() {
 
         initEngine();
 
-        // Real-time Simulation Loop
         const interval = setInterval(() => {
             setLatencyHistory(prev => [...prev.slice(-30), { time: '', val: 40 + Math.random() * 20 }]);
             setMetrics(prev => ({ ...prev, slot: prev.slot + 1, tps: 2000 + Math.random() * 800 }));
         }, 800);
         return () => clearInterval(interval);
-
     }, [addLog]);
 
-    // Filtering
     const displayedNodes = useMemo(() => {
         if (!filter) return nodes;
         const lower = filter.toLowerCase();
         return nodes.filter(n => n.name.toLowerCase().includes(lower) || n.city?.toLowerCase().includes(lower));
     }, [nodes, filter]);
 
-    // Risk Stats
     const riskStats = useMemo(() => ({
         critical: nodes.filter(n => n.riskScore >= 80).length,
         warning: nodes.filter(n => n.riskScore >= 50 && n.riskScore < 80).length,
         healthy: nodes.filter(n => n.riskScore < 50).length
     }), [nodes]);
 
-    // ========================================================================
-    // RENDER UI
-    // ========================================================================
     return (
         <main className="relative w-full h-screen bg-[#02040a] overflow-hidden text-white font-sans selection:bg-cyan-500/30">
-            
-            {/* --- LAYER 1: THE GLOBE (CINEMATIC VIEW) --- */}
             <div className={`absolute inset-0 z-0 transition-all duration-1000 ${viewMode === 'analyst' ? 'opacity-20 blur-sm scale-105' : 'opacity-100'}`}>
-                <GlobeViz 
-                    nodes={nodes.filter(n => n.lat !== 0)} 
-                    onNodeClick={(n: any) => { setSelectedNode(n); setUiVisible(true); }} 
-                />
+                <GlobeViz nodes={nodes.filter(n => n.lat !== 0)} onNodeClick={(n: any) => { setSelectedNode(n); setUiVisible(true); }} />
             </div>
 
-            {/* --- LAYER 2: HUD & CONTROLS --- */}
             <div className={`absolute top-0 left-0 w-full p-6 z-50 flex justify-between items-start transition-opacity duration-300 ${uiVisible ? 'opacity-100' : 'opacity-0'}`}>
                 <div className="flex flex-col gap-4">
                     <h1 className="text-4xl font-black tracking-tighter text-white drop-shadow-2xl flex items-center gap-2 select-none">
-                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">v4.0 INTELLIGENCE</span>
+                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">v4.1 INTEL</span>
                     </h1>
                     <div className="flex bg-white/5 rounded-lg p-1 border border-white/10 backdrop-blur-md w-fit shadow-xl pointer-events-auto">
                         <TabButton active={viewMode === 'monitor'} onClick={() => setViewMode('monitor')} icon={<GlobeIcon size={14}/>} label="MONITOR" />
                         <TabButton active={viewMode === 'analyst'} onClick={() => setViewMode('analyst')} icon={<LayoutDashboard size={14}/>} label="ANALYST" />
                     </div>
                 </div>
-                
                 <div className="flex gap-4 items-center">
                     <div className="hidden md:flex gap-4 pointer-events-auto">
                         <MetricBox label="EPOCH" value={metrics.epoch} sub={`SLOT ${metrics.slot}`} />
@@ -366,16 +294,12 @@ export default function Home() {
                 </div>
             </div>
 
-            {/* TOGGLE UI */}
             <button onClick={() => setUiVisible(!uiVisible)} className="absolute bottom-6 right-6 z-50 p-3 bg-black/50 hover:bg-white/10 rounded-full border border-white/10 text-cyan-400 transition pointer-events-auto">
                 {uiVisible ? <EyeOff size={20}/> : <Eye size={20}/>}
             </button>
 
-            {/* --- LAYER 3: INSIGHTS & ALERTS (SIDEBAR) --- */}
             {viewMode === 'monitor' && uiVisible && (
                 <div className="absolute top-40 right-6 w-80 flex flex-col gap-4 z-40 pointer-events-auto animate-in slide-in-from-right-10">
-                    
-                    {/* ACTIONABLE INSIGHTS PANEL */}
                     <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl">
                         <div className="p-3 border-b border-white/10 bg-gradient-to-r from-cyan-900/20 to-transparent flex justify-between items-center">
                             <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2"><BrainCircuit size={14}/> Insights</h3>
@@ -394,51 +318,36 @@ export default function Home() {
                             ))}
                         </div>
                     </div>
-
-                    {/* LIVE ALERTS LOG */}
                     <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl h-48 flex flex-col">
                         <div className="p-3 border-b border-white/10"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Activity size={14}/> Live Feed</h3></div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
                             {logs.map((log, i) => (
-                                <div key={i} className={`text-[10px] truncate ${log.includes('ALERT') ? 'text-red-400 font-bold' : log.includes('SUCCESS') ? 'text-green-400' : 'text-gray-500'}`}>
-                                    {log}
-                                </div>
+                                <div key={i} className={`text-[10px] truncate ${log.includes('ALERT') ? 'text-red-400 font-bold' : log.includes('SUCCESS') ? 'text-green-400' : 'text-gray-500'}`}>{log}</div>
                             ))}
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* --- LAYER 4: ANALYST MODE (DASHBOARD) --- */}
             {viewMode === 'analyst' && (
                 <div className="absolute inset-0 z-40 pt-32 px-6 pb-6 overflow-y-auto custom-scrollbar bg-[#050505]/90 backdrop-blur-md animate-in fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pointer-events-auto max-w-[1600px] mx-auto">
-                        
-                        {/* 1. NETWORK HEALTH OVERVIEW */}
                         <div className="col-span-12 md:col-span-8 grid grid-cols-3 gap-4">
                             <StatCard title="Network Risk Index" value="Low" sub="Stable" color="text-green-400" icon={<Shield size={16}/>} />
                             <StatCard title="Avg Latency (P95)" value="142ms" sub="-12ms vs Epoch" color="text-cyan-400" icon={<Activity size={16}/>} />
                             <StatCard title="Critical Nodes" value={riskStats.critical.toString()} sub="Require Attention" color={riskStats.critical > 0 ? "text-red-500" : "text-gray-400"} icon={<AlertCircle size={16}/>} />
-                            
-                            {/* Latency Trend */}
                             <div className="col-span-3 bg-[#0a0a0a] border border-white/10 rounded-xl p-4 h-48 shadow-lg">
                                 <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">Global Latency Trend (24h)</h3>
                                 <div className="h-full w-full -ml-2">
                                     <ResponsiveContainer width="100%" height="80%">
                                         <AreaChart data={latencyHistory}>
-                                            <defs>
-                                                <linearGradient id="colorLat" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/><stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                                                </linearGradient>
-                                            </defs>
+                                            <defs><linearGradient id="colorLat" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/><stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/></linearGradient></defs>
                                             <Area type="monotone" dataKey="val" stroke="#06b6d4" strokeWidth={2} fill="url(#colorLat)" />
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
                             </div>
                         </div>
-
-                        {/* 2. RISK ANALYSIS (ISP) */}
                         <div className="col-span-12 md:col-span-4 bg-[#0a0a0a] border border-white/10 rounded-xl p-5 flex flex-col shadow-lg">
                             <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-2"><Server size={14}/> ISP Concentration Risk</h3>
                             <div className="text-xs text-gray-500 mb-4">High concentration in a single ISP increases censorship risk.</div>
@@ -446,25 +355,16 @@ export default function Home() {
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie data={ispData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                                            {ispData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={[COLORS.brand.primary, COLORS.brand.secondary, '#6366f1', '#8b5cf6', '#ec4899'][index % 5]} />
-                                            ))}
+                                            {ispData.map((entry, index) => <Cell key={`cell-${index}`} fill={[COLORS.brand.primary, COLORS.brand.secondary, '#6366f1', '#8b5cf6', '#ec4899'][index % 5]} />)}
                                         </Pie>
                                         <Tooltip contentStyle={{background: '#000', border: '1px solid #333', fontSize: '10px'}} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
                             <div className="grid grid-cols-2 gap-2 mt-2">
-                                {ispData.slice(0,4).map((d,i) => (
-                                    <div key={i} className="flex justify-between text-[10px] text-gray-400 border-b border-white/5 pb-1">
-                                        <span>{d.name}</span>
-                                        <span className="font-mono text-white">{d.value.toFixed(1)}M</span>
-                                    </div>
-                                ))}
+                                {ispData.slice(0,4).map((d,i) => (<div key={i} className="flex justify-between text-[10px] text-gray-400 border-b border-white/5 pb-1"><span>{d.name}</span><span className="font-mono text-white">{d.value.toFixed(1)}M</span></div>))}
                             </div>
                         </div>
-
-                        {/* 3. NODE ANALYTICS TABLE */}
                         <div className="col-span-12 bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-xl min-h-[500px] flex flex-col">
                             <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
                                 <h2 className="text-sm font-bold text-white flex items-center gap-2"><Database size={16} className="text-cyan-500"/> NODE PERFORMANCE MATRIX</h2>
@@ -473,7 +373,6 @@ export default function Home() {
                                     <input type="text" placeholder="Search Node..." className="w-full bg-black border border-white/10 rounded-lg py-1.5 pl-9 pr-3 text-xs text-white focus:border-cyan-500 outline-none transition" value={filter} onChange={e => setFilter(e.target.value)} />
                                 </div>
                             </div>
-                            
                             <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-black/40 border-b border-white/5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                                 <div className="col-span-3">Identity / Location</div>
                                 <div className="col-span-2 text-right">Stake</div>
@@ -482,33 +381,18 @@ export default function Home() {
                                 <div className="col-span-2">ISP</div>
                                 <div className="col-span-1"></div>
                             </div>
-
                             <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/20">
                                 {displayedNodes.map((node) => (
                                     <div key={node.pubkey} className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition items-center group text-xs">
                                         <div className="col-span-3 flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-[10px] text-black shadow-lg" style={{backgroundColor: node.avatarColor}}>
-                                                {node.name.substring(0,2)}
-                                            </div>
-                                            <div>
-                                                <div className="font-bold text-white truncate w-32">{node.name}</div>
-                                                <div className="text-[10px] text-gray-500 flex items-center gap-1"><MapPin size={8}/> {node.city || 'Unknown'}</div>
-                                            </div>
+                                            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-[10px] text-black shadow-lg" style={{backgroundColor: node.avatarColor}}>{node.name.substring(0,2)}</div>
+                                            <div><div className="font-bold text-white truncate w-32">{node.name}</div><div className="text-[10px] text-gray-500 flex items-center gap-1"><MapPin size={8}/> {node.city || 'Unknown'}</div></div>
                                         </div>
-                                        <div className="col-span-2 text-right">
-                                            <div className="font-mono text-white">{node.stakeDisplay}</div>
-                                            <div className="text-[9px] text-gray-500">SOL</div>
-                                        </div>
-                                        <div className="col-span-2 flex justify-center">
-                                            <RiskBadge score={node.riskScore} />
-                                        </div>
-                                        <div className="col-span-2 text-center font-mono text-gray-400">
-                                            {node.voteLag} / <span className={node.skipRate > 5 ? 'text-red-400' : ''}>{node.skipRate.toFixed(1)}%</span>
-                                        </div>
+                                        <div className="col-span-2 text-right"><div className="font-mono text-white">{node.stakeDisplay}</div><div className="text-[9px] text-gray-500">SOL</div></div>
+                                        <div className="col-span-2 flex justify-center"><RiskBadge score={node.riskScore} /></div>
+                                        <div className="col-span-2 text-center font-mono text-gray-400">{node.voteLag} / <span className={node.skipRate > 5 ? 'text-red-400' : ''}>{node.skipRate.toFixed(1)}%</span></div>
                                         <div className="col-span-2 text-gray-400 truncate">{node.isp || 'Unknown'}</div>
-                                        <div className="col-span-1 flex justify-end">
-                                            <button onClick={() => setSelectedNode(node)} className="p-1.5 rounded bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500 hover:text-black transition"><ArrowUpRight size={14}/></button>
-                                        </div>
+                                        <div className="col-span-1 flex justify-end"><button onClick={() => setSelectedNode(node)} className="p-1.5 rounded bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500 hover:text-black transition"><ArrowUpRight size={14}/></button></div>
                                     </div>
                                 ))}
                             </div>
@@ -517,37 +401,21 @@ export default function Home() {
                 </div>
             )}
 
-            {/* --- DRILL-DOWN MODAL (INSPECTOR) --- */}
             {selectedNode && (
                 <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto p-0 md:p-6 animate-in fade-in">
                     <div className="bg-[#0c0c0c] border border-white/20 rounded-t-2xl md:rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden h-[80vh] md:h-auto flex flex-col">
-                        
-                        {/* Header */}
                         <div className="p-5 border-b border-white/10 bg-[#111] flex justify-between items-start">
                             <div className="flex gap-4">
-                                <div className="w-16 h-16 rounded-xl flex items-center justify-center text-3xl font-black text-black shadow-xl" style={{backgroundColor: selectedNode.avatarColor}}>
-                                    {selectedNode.name.substring(0,2)}
-                                </div>
+                                <div className="w-16 h-16 rounded-xl flex items-center justify-center text-3xl font-black text-black shadow-xl" style={{backgroundColor: selectedNode.avatarColor}}>{selectedNode.name.substring(0,2)}</div>
                                 <div>
-                                    <div className="flex items-center gap-2">
-                                        <h2 className="text-2xl font-bold text-white">{selectedNode.name}</h2>
-                                        <RiskBadge score={selectedNode.riskScore} />
-                                    </div>
-                                    <div className="text-sm text-cyan-500 font-mono mt-1 flex items-center gap-2">
-                                        <Shield size={12}/> {selectedNode.pubkey}
-                                    </div>
-                                    <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
-                                        <MapPin size={12}/> {selectedNode.city}, {selectedNode.country}
-                                    </div>
+                                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-white">{selectedNode.name}</h2><RiskBadge score={selectedNode.riskScore} /></div>
+                                    <div className="text-sm text-cyan-500 font-mono mt-1 flex items-center gap-2"><Shield size={12}/> {selectedNode.pubkey}</div>
+                                    <div className="text-xs text-gray-500 mt-1 flex items-center gap-2"><MapPin size={12}/> {selectedNode.city}, {selectedNode.country}</div>
                                 </div>
                             </div>
                             <button onClick={() => setSelectedNode(null)} className="p-2 hover:bg-white/10 rounded-full transition"><X size={20} className="text-gray-400"/></button>
                         </div>
-
-                        {/* Content Grid */}
                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto custom-scrollbar">
-                            
-                            {/* Performance Card */}
                             <div className="bg-white/5 rounded-xl p-4 border border-white/5">
                                 <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Activity size={14}/> Performance</h3>
                                 <div className="space-y-4">
@@ -556,25 +424,18 @@ export default function Home() {
                                     <MetricRow label="Skip Rate" value={`${selectedNode.skipRate.toFixed(1)}%`} max={20} color="bg-red-500" inverse />
                                 </div>
                             </div>
-
-                            {/* Hardware Simulation Card */}
                             <div className="bg-white/5 rounded-xl p-4 border border-white/5">
                                 <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Cpu size={14}/> Hardware Telemetry (Sim)</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <HardwareDial label="CPU Load" value={selectedNode.cpuLoad} />
-                                    <HardwareDial label="Memory" value={selectedNode.memoryUsage} />
-                                </div>
+                                <div className="grid grid-cols-2 gap-4"><HardwareDial label="CPU Load" value={selectedNode.cpuLoad} /><HardwareDial label="Memory" value={selectedNode.memoryUsage} /></div>
                                 <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-2 text-xs">
                                     <div className="flex justify-between text-gray-400"><span>Uptime</span><span className="text-white">{selectedNode.uptime}</span></div>
                                     <div className="flex justify-between text-gray-400"><span>Reputation</span><span className="text-green-400">{selectedNode.reputation}</span></div>
                                 </div>
                             </div>
-
-                            {/* Info Details */}
                             <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <DetailBox label="ISP" value={selectedNode.isp} />
                                 <DetailBox label="Version" value={selectedNode.version} />
-                                <DetailBox label="Commission" value="100%" /> {/* Placeholder */}
+                                <DetailBox label="Commission" value="100%" />
                                 <DetailBox label="Total Stake" value={`${selectedNode.stakeDisplay} SOL`} />
                             </div>
                         </div>
@@ -591,16 +452,8 @@ export default function Home() {
     );
 }
 
-// ============================================================================
-// SUB-COMPONENTS
-// ============================================================================
-
 function TabButton({ active, onClick, icon, label }: any) {
-    return (
-        <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold tracking-wider transition-all ${active ? 'bg-cyan-500 text-black shadow-glow' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
-            {icon} {label}
-        </button>
-    );
+    return <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold tracking-wider transition-all ${active ? 'bg-cyan-500 text-black shadow-glow' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>{icon} {label}</button>;
 }
 
 function MetricBox({ label, value, sub, color = "text-white" }: any) {
@@ -615,11 +468,7 @@ function MetricBox({ label, value, sub, color = "text-white" }: any) {
 function StatCard({ title, value, sub, color, icon }: any) {
     return (
         <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-4 flex items-center justify-between shadow-lg">
-            <div>
-                <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{title}</div>
-                <div className={`text-2xl font-bold ${color}`}>{value}</div>
-                <div className="text-[10px] text-gray-600 mt-1">{sub}</div>
-            </div>
+            <div><div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{title}</div><div className={`text-2xl font-bold ${color}`}>{value}</div><div className="text-[10px] text-gray-600 mt-1">{sub}</div></div>
             <div className="p-3 bg-white/5 rounded-lg text-gray-400">{icon}</div>
         </div>
     );
@@ -629,29 +478,16 @@ function RiskBadge({ score }: { score: number }) {
     let config = { bg: 'bg-green-500/20', text: 'text-green-400', label: 'LOW' };
     if (score >= 80) config = { bg: 'bg-red-500/20', text: 'text-red-400', label: 'CRITICAL' };
     else if (score >= 50) config = { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: 'WARNING' };
-
-    return (
-        <div className={`flex items-center gap-2 px-2 py-1 rounded text-[10px] font-bold ${config.bg} ${config.text} border border-white/5 w-fit`}>
-            <Activity size={10}/> {score} / 100 ({config.label})
-        </div>
-    );
+    return <div className={`flex items-center gap-2 px-2 py-1 rounded text-[10px] font-bold ${config.bg} ${config.text} border border-white/5 w-fit`}><Activity size={10}/> {score} / 100 ({config.label})</div>;
 }
 
 function MetricRow({ label, value, max, color, inverse = false }: any) {
-    // Inverse: Higher value implies FULL bar but generally represents "bad" in UI if context requires, 
-    // but here we just show simulation. For bars: width %
     const numVal = parseFloat(value);
     const pct = Math.min(100, (numVal / max) * 100);
-    
     return (
         <div>
-            <div className="flex justify-between text-xs mb-1">
-                <span className="text-gray-400">{label}</span>
-                <span className="font-mono text-white">{value}</span>
-            </div>
-            <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden">
-                <div className={`h-full ${color}`} style={{width: `${pct}%`}}></div>
-            </div>
+            <div className="flex justify-between text-xs mb-1"><span className="text-gray-400">{label}</span><span className="font-mono text-white">{value}</span></div>
+            <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden"><div className={`h-full ${color}`} style={{width: `${pct}%`}}></div></div>
         </div>
     );
 }
@@ -672,10 +508,5 @@ function HardwareDial({ label, value }: any) {
 }
 
 function DetailBox({ label, value }: any) {
-    return (
-        <div className="p-3 bg-white/5 rounded-lg border border-white/5">
-            <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{label}</div>
-            <div className="text-white font-mono text-sm truncate">{value || '-'}</div>
-        </div>
-    );
+    return <div className="p-3 bg-white/5 rounded-lg border border-white/5"><div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{label}</div><div className="text-white font-mono text-sm truncate">{value || '-'}</div></div>;
 }
