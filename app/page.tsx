@@ -118,7 +118,7 @@ export default function Home() {
     const processingRef = useRef(false);
 
     // --- LOGGING ---
-    const addLog = useCallback((msg: string, type: 'info' | 'warn' | 'error' = 'info') => {
+    const addLog = useCallback((msg: string, type: 'info' | 'warn' | 'success' | 'error' = 'info') => {
         const time = new Date().toLocaleTimeString([], {hour12: false});
         setLogs(prev => [`[${time}] [${type.toUpperCase()}] ${msg}`, ...prev].slice(0, 50));
     }, []);
