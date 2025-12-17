@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/record-snapshot",
-      "schedule": "*/10 * * * *"
-    }
-  ]
-}
