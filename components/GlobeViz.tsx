@@ -2,20 +2,20 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
-// SSR Sorununu önlemek için
+// SSR (Server Side Rendering) Hatasını Önleme
 let Globe: any = () => null;
 if (typeof window !== 'undefined') {
     Globe = require('react-globe.gl').default;
 }
 
+// TİP TANIMLAMALARI (Null hatalarını önlemek için güncellendi)
 interface Node {
     pubkey: string;
     lat: number;
     lng: number;
-    // GÜNCELLEME: null değerini kabul edecek şekilde ayarladık
-    city?: string | null;
-    country?: string | null;
-    isp?: string | null;
+    city?: string | null;  // null olabilir
+    country?: string | null; // null olabilir
+    isp?: string | null;     // null olabilir
     healthScore: number;
     avatarColor: string;
 }
@@ -38,16 +38,18 @@ export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
                 height: window.innerHeight
             });
         };
-        handleResize(); // İlk açılışta ayarla
+        handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
     useEffect(() => {
         if (globeEl.current) {
+            // Harita kontrolleri
             globeEl.current.controls().autoRotate = true;
-            globeEl.current.controls().autoRotateSpeed = 0.3;
-            globeEl.current.pointOfView({ lat: 20, lng: 0, altitude: 1.8 });
+            globeEl.current.controls().autoRotateSpeed = 0.5;
+            // Açılışta biraz daha uzaktan bak
+            globeEl.current.pointOfView({ lat: 20, lng: 0, altitude: 2.0 });
         }
     }, [mounted]);
 
@@ -58,35 +60,52 @@ export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
             ref={globeEl}
             width={dimensions.width}
             height={dimensions.height}
-            globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
+            
+            // --- GÖRSEL AYARLAR (AYDINLIK MOD) ---
+            // Daha net görünen "Blue Marble" kaplaması
+            globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
             bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-            backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
-            atmosphereColor="#3a86ff"
-            atmosphereAltitude={0.25}
+            // Arka planı tamamen şeffaf yapıyoruz (CSS ile halledeceğiz)
+            backgroundColor="rgba(0,0,0,0)"
+            
+            // ATMOSFER & IŞIK (Karanlığı önlemek için)
+            atmosphereColor="#7caeea"
+            atmosphereAltitude={0.15}
+            ambientLightColor="#ffffff" // Beyaz ortam ışığı
+            ambientLightIntensity={1.2} // Işık şiddetini artırdık
+            
+            // --- DATA NOKTALARI ---
             pointsData={nodes}
             pointLat="lat"
             pointLng="lng"
             pointColor="avatarColor"
-            pointAltitude={0.07}
-            pointRadius={0.6}
-            pointsMerge={true}
+            pointAltitude={0.1} // Noktalar haritaya gömülmesin diye yükselttik
+            pointRadius={0.5}
+            pointsMerge={true} // Performans için
+            
+            // --- HALKALAR (SİNYAL EFEKTİ) ---
             ringsData={nodes}
             ringLat="lat"
             ringLng="lng"
-            ringColor={() => '#4cc9f0'}
-            ringMaxRadius={3}
-            ringPropagationSpeed={2}
+            ringColor={() => '#38bdf8'} // Açık mavi halkalar
+            ringMaxRadius={2}
+            ringPropagationSpeed={3}
             ringRepeatPeriod={800}
+            
+            // --- ETİKETLER ---
             labelsData={nodes}
             labelLat="lat"
             labelLng="lng"
-            labelText={(d: any) => d.city}
-            labelSize={0.8}
+            labelText={(d: any) => d.city ? d.city : ''}
+            labelSize={1.2}
             labelDotRadius={0.4}
-            labelColor={() => 'rgba(255, 255, 255, 0.9)'}
+            labelColor={() => 'rgba(255, 255, 255, 1)'}
             labelResolution={2}
-            labelAltitude={0.01}
+            labelAltitude={0.05}
+
+            // --- ETKİLEŞİM ---
             onPointClick={onNodeClick}
+            onLabelClick={onNodeClick}
         />
     );
 }
