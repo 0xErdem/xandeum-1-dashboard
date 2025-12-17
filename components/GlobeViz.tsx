@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
-// SSR Sorununu önlemek için Globe kütüphanesini conditional import yapıyoruz
+// SSR Sorununu önlemek için
 let Globe: any = () => null;
 if (typeof window !== 'undefined') {
     Globe = require('react-globe.gl').default;
@@ -23,34 +23,29 @@ interface GlobeVizProps {
 }
 
 export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
-    // HATA BURADAYDI: Parantez içine 'null' eklendi.
     const globeEl = useRef<any>(null);
-    
     const [mounted, setMounted] = useState(false);
     const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
     useEffect(() => {
         setMounted(true);
-        // Pencere boyutuna göre haritayı ayarla
         const handleResize = () => {
             setDimensions({
                 width: window.innerWidth,
                 height: window.innerHeight
             });
         };
-        
-        handleResize(); // İlk açılışta ayarla
+        handleResize();
         window.addEventListener('resize', handleResize);
-        
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
     useEffect(() => {
-        // Harita yüklendiğinde otomatik dönme efekti ve bakış açısı
         if (globeEl.current) {
+            // Dönüş hızı ve açısı
             globeEl.current.controls().autoRotate = true;
-            globeEl.current.controls().autoRotateSpeed = 0.5;
-            globeEl.current.pointOfView({ lat: 20, lng: 0, altitude: 2.5 });
+            globeEl.current.controls().autoRotateSpeed = 0.3;
+            globeEl.current.pointOfView({ lat: 20, lng: 0, altitude: 1.8 }); // Daha yakından bakış
         }
     }, [mounted]);
 
@@ -61,34 +56,45 @@ export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
             ref={globeEl}
             width={dimensions.width}
             height={dimensions.height}
-            globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg"
+            // DAHA AYDINLIK KAPLAMALAR
+            globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
             bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-            backgroundColor="rgba(0,0,0,0)"
-            atmosphereColor="#06b6d4"
-            atmosphereAltitude={0.15}
+            backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png" // Yıldızlı arka plan
+            
+            // ATMOSFER AYARLARI (PARLAKLIK)
+            atmosphereColor="#3a86ff" // Mavi Neon
+            atmosphereAltitude={0.25} // Daha geniş atmosfer
+            
+            // NOKTA (NODE) AYARLARI
             pointsData={nodes}
             pointLat="lat"
             pointLng="lng"
             pointColor="avatarColor"
-            pointAltitude={0.01}
-            pointRadius={0.5}
+            pointAltitude={0.07} // Yerden daha yüksek
+            pointRadius={0.6} // Daha büyük noktalar
             pointsMerge={true}
+            
+            // HALKA (SİNYAL) AYARLARI
             ringsData={nodes}
             ringLat="lat"
             ringLng="lng"
-            ringColor={() => '#06b6d4'}
-            ringMaxRadius={2}
+            ringColor={() => '#4cc9f0'}
+            ringMaxRadius={3}
             ringPropagationSpeed={2}
-            ringRepeatPeriod={1000}
-            onPointClick={onNodeClick}
+            ringRepeatPeriod={800}
+            
+            // ETİKET AYARLARI
             labelsData={nodes}
             labelLat="lat"
             labelLng="lng"
-            labelText="city"
-            labelSize={0.5}
-            labelDotRadius={0.3}
-            labelColor={() => 'rgba(255, 255, 255, 0.75)'}
+            labelText={(d: any) => d.city}
+            labelSize={0.8}
+            labelDotRadius={0.4}
+            labelColor={() => 'rgba(255, 255, 255, 0.9)'}
             labelResolution={2}
+            labelAltitude={0.01}
+            
+            onPointClick={onNodeClick}
         />
     );
 }
