@@ -12,7 +12,10 @@ interface Node {
     pubkey: string;
     lat: number;
     lng: number;
-    city?: string;
+    // GÜNCELLEME: null değerini kabul edecek şekilde ayarladık
+    city?: string | null;
+    country?: string | null;
+    isp?: string | null;
     healthScore: number;
     avatarColor: string;
 }
@@ -35,17 +38,16 @@ export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
                 height: window.innerHeight
             });
         };
-        handleResize();
+        handleResize(); // İlk açılışta ayarla
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
     useEffect(() => {
         if (globeEl.current) {
-            // Dönüş hızı ve açısı
             globeEl.current.controls().autoRotate = true;
             globeEl.current.controls().autoRotateSpeed = 0.3;
-            globeEl.current.pointOfView({ lat: 20, lng: 0, altitude: 1.8 }); // Daha yakından bakış
+            globeEl.current.pointOfView({ lat: 20, lng: 0, altitude: 1.8 });
         }
     }, [mounted]);
 
@@ -56,25 +58,18 @@ export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
             ref={globeEl}
             width={dimensions.width}
             height={dimensions.height}
-            // DAHA AYDINLIK KAPLAMALAR
             globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
             bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-            backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png" // Yıldızlı arka plan
-            
-            // ATMOSFER AYARLARI (PARLAKLIK)
-            atmosphereColor="#3a86ff" // Mavi Neon
-            atmosphereAltitude={0.25} // Daha geniş atmosfer
-            
-            // NOKTA (NODE) AYARLARI
+            backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+            atmosphereColor="#3a86ff"
+            atmosphereAltitude={0.25}
             pointsData={nodes}
             pointLat="lat"
             pointLng="lng"
             pointColor="avatarColor"
-            pointAltitude={0.07} // Yerden daha yüksek
-            pointRadius={0.6} // Daha büyük noktalar
+            pointAltitude={0.07}
+            pointRadius={0.6}
             pointsMerge={true}
-            
-            // HALKA (SİNYAL) AYARLARI
             ringsData={nodes}
             ringLat="lat"
             ringLng="lng"
@@ -82,8 +77,6 @@ export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
             ringMaxRadius={3}
             ringPropagationSpeed={2}
             ringRepeatPeriod={800}
-            
-            // ETİKET AYARLARI
             labelsData={nodes}
             labelLat="lat"
             labelLng="lng"
@@ -93,7 +86,6 @@ export default function GlobeViz({ nodes, onNodeClick }: GlobeVizProps) {
             labelColor={() => 'rgba(255, 255, 255, 0.9)'}
             labelResolution={2}
             labelAltitude={0.01}
-            
             onPointClick={onNodeClick}
         />
     );
