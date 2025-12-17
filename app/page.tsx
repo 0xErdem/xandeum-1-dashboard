@@ -13,7 +13,7 @@ import {
     LayoutDashboard, Globe as GlobeIcon, Search, ArrowUpRight, Server,
     Filter, Eye, EyeOff, ChevronRight, AlertCircle, HeartPulse, Info,
     TrendingUp, DollarSign, BrainCircuit, Terminal as TerminalIcon, 
-    HardDrive, History // History ikonu eklendi
+    HardDrive, History 
 } from 'lucide-react';
 
 import { 
@@ -118,7 +118,7 @@ export default function Home() {
     const processingRef = useRef(false);
 
     // --- LOGGING ---
-    const addLog = useCallback((msg: string, type: 'info' | 'warn' | 'success' | 'error' = 'info') => {
+    const addLog = useCallback((msg: string, type: 'info' | 'warn' | 'error' | 'success' = 'info') => {
         const time = new Date().toLocaleTimeString([], {hour12: false});
         setLogs(prev => [`[${time}] [${type.toUpperCase()}] ${msg}`, ...prev].slice(0, 50));
     }, []);
@@ -263,7 +263,7 @@ export default function Home() {
                 baseNodes.sort((a, b) => b.rawStake - a.rawStake);
                 setAllNodes(baseNodes);
                 setLoading(false);
-                addLog(`Network scan complete. ${baseNodes.length} nodes detected.`, "success");
+                addLog(`Network scan complete. ${baseNodes.length} nodes detected.`, "info");
 
                 // 4. Geo-Location (Throttled)
                 const cachedData = localStorage.getItem(CACHE_KEY);
@@ -299,9 +299,8 @@ export default function Home() {
                                 }
                             }
                         } catch (e) {
-                            const fallback = FALLBACK_LOCATIONS[i % FALLBACK_LOCATIONS.length];
-                            // Eğer API hata verirse, fallback kullan (Harita boş kalmasın diye)
-                            updatedNodes[i] = { ...node, ...fallback, lat: fallback.lat + Math.random(), lng: fallback.lng + Math.random(), isp: fallback.isp };
+                            // Hata durumunda sadece logla, sahte veri ekleme
+                            console.warn(`Geo resolution failed for ${ip}`);
                         }
                     }
                     if (needsCacheUpdate) localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
