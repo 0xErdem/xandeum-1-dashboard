@@ -118,6 +118,7 @@ export default function Home() {
     const processingRef = useRef(false);
 
     // --- LOGGING ---
+    // HATA DÜZELTİLDİ: 'success' tipi eklendi
     const addLog = useCallback((msg: string, type: 'info' | 'warn' | 'error' | 'success' = 'info') => {
         const time = new Date().toLocaleTimeString([], {hour12: false});
         setLogs(prev => [`[${time}] [${type.toUpperCase()}] ${msg}`, ...prev].slice(0, 50));
@@ -263,7 +264,7 @@ export default function Home() {
                 baseNodes.sort((a, b) => b.rawStake - a.rawStake);
                 setAllNodes(baseNodes);
                 setLoading(false);
-                addLog(`Network scan complete. ${baseNodes.length} nodes detected.`, "info");
+                addLog(`Network scan complete. ${baseNodes.length} nodes detected.`, "success"); // ARTIK HATA VERMEZ
 
                 // 4. Geo-Location (Throttled)
                 const cachedData = localStorage.getItem(CACHE_KEY);
@@ -299,7 +300,7 @@ export default function Home() {
                                 }
                             }
                         } catch (e) {
-                            // Hata durumunda sadece logla, sahte veri ekleme
+                            // HATA DÜZELTİLDİ: FALLBACK_LOCATIONS kaldırıldı
                             console.warn(`Geo resolution failed for ${ip}`);
                         }
                     }
@@ -385,7 +386,8 @@ export default function Home() {
                     nodes={allNodes.filter(n => n.lat !== 0)} 
                     onNodeClick={(node) => {
                         if (viewMode === 'simple') {
-                            setSimpleFilterCity(node.city);
+                            // HATA DÜZELTİLDİ: city yoksa null gönderiyoruz
+                            setSimpleFilterCity(node.city || null);
                             setSelectedNode(null); 
                             setIsPanelOpen(true);
                         }
