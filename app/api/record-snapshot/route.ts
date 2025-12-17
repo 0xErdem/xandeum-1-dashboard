@@ -1,75 +1,56 @@
-// app/api/record-snapshot/route.ts
-import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { Connection } from '@solana/web3.js';
-import { supabase } from '@/lib/supabase';
+import { NextResponse } from 'next/server';
 
-// Bu fonksiyon sadece gizli bir anahtarla (CRON_SECRET) çalışsın ki herkes tetikleyemesin
-// Şimdilik test için public bırakıyoruz.
+// 1. Supabase Bağlantısı
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// 2. Solana Bağlantısı
+const RPC_ENDPOINT = "https://api.devnet.xandeum.com:8899";
+const connection = new Connection(RPC_ENDPOINT, "confirmed");
 
 export async function GET() {
   try {
-    console.log("SNAPSHOT: Veri çekme işlemi başladı...");
-    const connection = new Connection("https://api.devnet.xandeum.com:8899", "confirmed");
-
-    // 1. Solana'dan Verileri Çek
-    const [gossipNodes, voteAccounts, epochInfo] = await Promise.all([
-      connection.getClusterNodes(),
+    // --- GERÇEK VERİ TOPLAMA ---
+    const [epochInfo, voteAccounts, perfSamples] = await Promise.all([
+      connection.getEpochInfo(),
       connection.getVoteAccounts(),
-      connection.getEpochInfo().catch(() => null)
+      connection.getRecentPerformanceSamples(1),
     ]);
 
-    const currentSlotHeight = epochInfo?.absoluteSlot || 0;
+    // 1. Toplam Aktif Stake
+    const current = voteAccounts.current.reduce((acc, v) => acc + v.activatedStake, 0);
+    const delinquent = voteAccounts.delinquent.reduce((acc, v) => acc + v.activatedStake, 0);
+    const totalStake = current + delinquent;
 
-    // 2. Vote Map Oluştur
-    const voteMap: Record<string, any> = {};
-    [...voteAccounts.current, ...voteAccounts.delinquent].forEach(vote => {
-        voteMap[vote.nodePubkey] = vote;
-    });
+    // 2. Gerçek TPS (Son örneklemden)
+    const tps = perfSamples[0]?.numTransactions 
+      ? perfSamples[0].numTransactions / perfSamples[0].samplePeriodSecs 
+      : 0;
 
-    // 3. Veriyi İşle ve Hazırla
-    const snapshots = gossipNodes.map(node => {
-        const voteData = voteMap[node.pubkey];
-        
-        let slotLag = 0;
-        let lastVote = 0;
-        if (voteData && currentSlotHeight > 0) {
-            lastVote = voteData.lastVote;
-            slotLag = Math.max(0, currentSlotHeight - lastVote);
+    // 3. Node Sayısı
+    const activeValidators = voteAccounts.current.length;
+
+    // --- SUPABASE'E KAYIT ---
+    const { data, error } = await supabase
+      .from('network_stats') // Tablo adın farklıysa burayı güncelle
+      .insert([
+        { 
+          time: new Date().toISOString(), 
+          stake: (totalStake / 1000000000), // SOL cinsinden
+          tps: tps,
+          node_count: activeValidators,
+          epoch: epochInfo.epoch
         }
-
-        // Health Score (Aynı mantık)
-        let healthScore = 100;
-        if (slotLag > 100) healthScore -= 10;
-        if (slotLag > 500) healthScore -= 30;
-        if (!voteData) healthScore = 85; 
-        if (!node.gossip) healthScore -= 50;
-        healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
-
-        return {
-            pubkey: node.pubkey,
-            node_name: `Node-${node.pubkey.slice(0, 4)}`, // İstersen Identity Map'i buraya da taşıyabilirsin
-            stake: voteData ? voteData.activatedStake : 0,
-            health_score: healthScore,
-            slot_lag: slotLag,
-            is_validator: !!voteData,
-            // Skip rate şimdilik RPC'den zor geldiği için null veya simüle geçilebilir
-            skip_rate: 0 
-        };
-    });
-
-    // 4. Supabase'e Toplu Kayıt (Bulk Insert)
-    // Hepsini kaydetmek yerine sadece Validatörleri veya ilk 100 node'u kaydedelim (Veritabanı şişmesin)
-    const significantNodes = snapshots
-        .sort((a, b) => b.stake - a.stake) // En yüksek stake'liler
-        .slice(0, 100); // İlk 100
-
-    const { error } = await supabase
-        .from('node_snapshots')
-        .insert(significantNodes);
+      ])
+      .select();
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, count: significantNodes.length, message: "Snapshot recorded successfully!" });
+    return NextResponse.json({ success: true, saved_data: data });
 
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
