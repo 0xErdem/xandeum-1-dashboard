@@ -169,6 +169,7 @@ export default function Home() {
     }, []);
 
     // 2. RPC DATA LOOP
+    // 2. RPC DATA LOOP & ISP FIX
     useEffect(() => {
         const initEngine = async () => {
             if (processingRef.current) return;
@@ -200,8 +201,8 @@ export default function Home() {
                 const voteMap = new Map(votes.current.concat(votes.delinquent).map(v => [v.nodePubkey, v]));
                 
                 let totalStake = 0;
-                let ispCounts: Record<string, number> = {};
-
+                
+                // Process Nodes
                 const processedNodes: NodeData[] = cluster.map(rawNode => {
                     const vote = voteMap.get(rawNode.pubkey);
                     const prod = production?.value.byIdentity[rawNode.pubkey] || null;
@@ -232,29 +233,44 @@ export default function Home() {
                 
                 addLog(`Live Feed: ${processedNodes.length} nodes active.`, "success");
 
-                // GEO & ISP RESOLUTION
+                // --- ISP & GEO FIX ---
                 const cachedGeo = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
                 let cacheUpdated = false;
                 const updatedNodes = [...processedNodes];
+                let ispCounts: Record<string, number> = {};
 
+                // Önce Cache'deki veriyi hızlıca yükle ve grafiği doldur
+                updatedNodes.forEach((node, i) => {
+                    if (node.ip && cachedGeo[node.ip]) {
+                        Object.assign(updatedNodes[i], cachedGeo[node.ip]);
+                        const isp = cachedGeo[node.ip].isp || 'Unknown';
+                        ispCounts[isp] = (ispCounts[isp] || 0) + (node.stake / 1000000000);
+                    }
+                });
+
+                // Cache verisiyle grafiği HEMEN çiz (Bekleme yapma)
+                const initialSortedIsp = Object.entries(ispCounts)
+                    .map(([name, value]) => ({ name, value }))
+                    .sort((a, b) => b.value - a.value)
+                    .slice(0, 5);
+                
+                if (initialSortedIsp.length > 0) {
+                    setIspData(initialSortedIsp);
+                }
+
+                // Sonra yavaş yavaş eksikleri tamamla
                 const resolveGeo = async () => {
-                    let resolvedCount = 0;
+                    let apiCalls = 0;
                     for (let i = 0; i < updatedNodes.length; i++) {
                         const n = updatedNodes[i];
-                        if (!n.ip || n.ip.startsWith('10.') || n.ip.startsWith('127.')) continue;
+                        // Cache'de varsa veya IP yoksa atla
+                        if (!n.ip || cachedGeo[n.ip] || n.ip.startsWith('10.') || n.ip.startsWith('127.')) continue;
 
-                        if (cachedGeo[n.ip]) {
-                            Object.assign(updatedNodes[i], cachedGeo[n.ip]);
-                            const isp = cachedGeo[n.ip].isp || 'Unknown';
-                            if(isp !== 'Unknown') ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000);
-                            continue;
-                        }
-
-                        // Rate limit protection
-                        if (resolvedCount > 10) break; // Don't fetch too many at once
+                        // Rate Limit koruması: Her seferde en fazla 3 yeni IP çöz
+                        if (apiCalls > 3) break; 
 
                         try {
-                            await new Promise(r => setTimeout(r, 200));
+                            await new Promise(r => setTimeout(r, 300)); // Nazik bekleme
                             const res = await fetch(`https://ipwho.is/${n.ip}`);
                             const data = await res.json();
                             if (data.success) {
@@ -262,7 +278,7 @@ export default function Home() {
                                 cachedGeo[n.ip] = geoInfo;
                                 Object.assign(updatedNodes[i], geoInfo);
                                 cacheUpdated = true;
-                                resolvedCount++;
+                                apiCalls++;
                                 
                                 const isp = data.connection?.isp || 'Unknown';
                                 ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000);
@@ -273,15 +289,14 @@ export default function Home() {
                     if (cacheUpdated) {
                         localStorage.setItem(CACHE_KEY, JSON.stringify(cachedGeo));
                         setNodes([...updatedNodes]);
+                        
+                        // Grafiği güncelle
+                        const finalSortedIsp = Object.entries(ispCounts)
+                            .map(([name, value]) => ({ name, value }))
+                            .sort((a, b) => b.value - a.value)
+                            .slice(0, 5);
+                        setIspData(finalSortedIsp);
                     }
-
-                    // UPDATE ISP CHART
-                    const sortedIsp = Object.entries(ispCounts)
-                        .map(([name, value]) => ({ name, value }))
-                        .sort((a, b) => b.value - a.value)
-                        .slice(0, 5);
-                    
-                    if (sortedIsp.length > 0) setIspData(sortedIsp);
                 };
                 resolveGeo();
 
