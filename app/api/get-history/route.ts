@@ -1,31 +1,30 @@
-// app/api/get-history/route.ts
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
 
-export const dynamic = 'force-dynamic'; // Cacheleme yapma, her seferinde taze veri çek
+// Supabase Bağlantısı
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export async function GET() {
   try {
-    // Son 100 kaydı çek (Zaman sırasına göre)
+    // Veritabanından son 50 kaydı çek (Zamana göre tersten)
     const { data, error } = await supabase
-      .from('node_snapshots')
-      .select('created_at, stake, health_score, is_validator')
-      .order('created_at', { ascending: true })
-      .limit(200); // Son 200 veri noktası
+      .from('network_stats')
+      .select('*')
+      .order('time', { ascending: false })
+      .limit(50);
 
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase Error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
-    // Veriyi grafiğe uygun hale getir
-    // Tarih formatını saat:dakika yapıyoruz
-    const chartData = data.map((item: any) => ({
-      time: new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      stake: (item.stake / 1000000000).toFixed(0), // SOL cinsinden
-      health: item.health_score
-    }));
+    // Grafik soldan sağa aksın diye veriyi ters çeviriyoruz (Eskiden -> Yeniye)
+    return NextResponse.json(data ? data.reverse() : []);
 
-    return NextResponse.json(chartData);
-
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

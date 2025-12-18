@@ -1,10 +1,11 @@
 'use client';
 
 /**
- * XANDEUM.OS v5.3 - DEBUG EDITION
+ * XANDEUM.OS v5.4 - FINAL DATA LINK
  * * FIXES:
- * - Changed CACHE_KEY to force fresh ISP data fetch.
- * - Added explicit checks for empty data arrays.
+ * - Added "Fallback Data" for ISP Chart (Prevents empty black box).
+ * - Improved Date Parsing for Supabase History.
+ * - Added Debug Logs to Console.
  */
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
@@ -27,17 +28,16 @@ import {
 
 const GlobeViz = dynamic(() => import('../components/GlobeViz'), { 
     ssr: false,
-    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">CONNECTING...</div>
+    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">INITIALIZING...</div>
 });
 
 const RPC_ENDPOINT = "https://api.devnet.xandeum.com:8899";
-// CRITICAL: Cache key changed to force fresh data fetch
-const CACHE_KEY = 'xandeum_v5_force_clean_v2'; 
+const CACHE_KEY = 'xandeum_v5_final_fix';
 
 const COLORS = {
     risk: { low: '#10b981', medium: '#f59e0b', high: '#ef4444', critical: '#7f1d1d' },
     brand: { primary: '#06b6d4', secondary: '#3b82f6', dark: '#02040a' },
-    pie: ['#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e', '#10b981']
+    pie: ['#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e']
 };
 
 interface NodeData {
@@ -124,7 +124,10 @@ export default function Home() {
     const [logs, setLogs] = useState<string[]>([]);
     
     const [dbHistory, setDbHistory] = useState<any[]>([]);
-    const [ispData, setIspData] = useState<any[]>([]);
+    // Default Fallback Data for ISP to avoid "Empty Box"
+    const [ispData, setIspData] = useState<any[]>([
+        { name: 'Loading...', value: 100 }
+    ]);
     const [latencyHistory, setLatencyHistory] = useState<any[]>([]);
     
     const processingRef = useRef(false);
@@ -134,38 +137,45 @@ export default function Home() {
         setLogs(prev => [`[${type.toUpperCase()}] ${msg} (${time})`, ...prev].slice(0, 50));
     }, []);
 
-    // 1. SUPABASE HISTORY
+    // 1. SUPABASE HISTORY FETCH
     useEffect(() => {
         const fetchHistory = async () => {
             try {
+                console.log("Fetching History...");
                 const res = await fetch('/api/get-history');
-                if (res.ok) {
-                    const data = await res.json();
-                    if (Array.isArray(data) && data.length > 0) {
-                        const formatted = data.map((d: any) => ({
+                const data = await res.json();
+                
+                if (Array.isArray(data) && data.length > 0) {
+                    // Veriyi formatla: "2024-10-10T..." -> "14:30"
+                    const formatted = data.map((d: any) => {
+                        const date = new Date(d.time);
+                        return {
                             ...d,
-                            time: new Date(d.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
-                        })).reverse();
-                        setDbHistory(formatted);
-                    }
+                            time: date.getHours() + ':' + date.getMinutes().toString().padStart(2, '0')
+                        };
+                    });
+                    setDbHistory(formatted);
+                    if (dbHistory.length === 0) addLog("History Synced.", "success");
+                } else {
+                    console.warn("History data is empty array");
                 }
             } catch (e) {
-                console.error("History error", e);
+                console.error("History Fetch Failed:", e);
             }
         };
         fetchHistory();
-        const interval = setInterval(fetchHistory, 60000);
+        const interval = setInterval(fetchHistory, 30000);
         return () => clearInterval(interval);
     }, []);
 
-    // 2. RPC DATA
+    // 2. RPC DATA LOOP
     useEffect(() => {
         const initEngine = async () => {
             if (processingRef.current) return;
             processingRef.current = true;
 
             try {
-                addLog("Connecting to Solana Mainnet RPC...", "info");
+                addLog("Connecting to Mainnet...", "info");
                 const connection = new Connection(RPC_ENDPOINT, "confirmed");
 
                 const [cluster, votes, production, epochInfo, perfSamples] = await Promise.all([
@@ -188,14 +198,13 @@ export default function Home() {
                 }));
 
                 const voteMap = new Map(votes.current.concat(votes.delinquent).map(v => [v.nodePubkey, v]));
-                const prodMap = new Map(Object.entries(production?.value.byIdentity || {}));
                 
                 let totalStake = 0;
                 let ispCounts: Record<string, number> = {};
 
                 const processedNodes: NodeData[] = cluster.map(rawNode => {
                     const vote = voteMap.get(rawNode.pubkey);
-                    const prod = prodMap.get(rawNode.pubkey);
+                    const prod = production?.value.byIdentity[rawNode.pubkey] || null;
                     if (vote) totalStake += vote.activatedStake;
 
                     const m = calculateRealMetrics({ vote, production: prod, gossip: rawNode.gossip }, epochInfo?.absoluteSlot || 0);
@@ -221,29 +230,31 @@ export default function Home() {
                 setNodes(processedNodes);
                 setMetrics(prev => ({ ...prev, activeStake: totalStake }));
                 
-                // GEO LOGIC
+                addLog(`Live Feed: ${processedNodes.length} nodes active.`, "success");
+
+                // GEO & ISP RESOLUTION
                 const cachedGeo = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
                 let cacheUpdated = false;
                 const updatedNodes = [...processedNodes];
 
                 const resolveGeo = async () => {
+                    let resolvedCount = 0;
                     for (let i = 0; i < updatedNodes.length; i++) {
                         const n = updatedNodes[i];
                         if (!n.ip || n.ip.startsWith('10.') || n.ip.startsWith('127.')) continue;
 
-                        // Cache Hit?
                         if (cachedGeo[n.ip]) {
                             Object.assign(updatedNodes[i], cachedGeo[n.ip]);
-                            const isp = cachedGeo[n.ip].isp || 'Unknown ISP';
-                            if (isp !== 'Unknown ISP') {
-                                ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000);
-                            }
+                            const isp = cachedGeo[n.ip].isp || 'Unknown';
+                            if(isp !== 'Unknown') ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000);
                             continue;
                         }
 
-                        // API Fetch
+                        // Rate limit protection
+                        if (resolvedCount > 10) break; // Don't fetch too many at once
+
                         try {
-                            await new Promise(r => setTimeout(r, 150));
+                            await new Promise(r => setTimeout(r, 200));
                             const res = await fetch(`https://ipwho.is/${n.ip}`);
                             const data = await res.json();
                             if (data.success) {
@@ -251,26 +262,31 @@ export default function Home() {
                                 cachedGeo[n.ip] = geoInfo;
                                 Object.assign(updatedNodes[i], geoInfo);
                                 cacheUpdated = true;
-                                if (i % 5 === 0) setNodes([...updatedNodes]);
+                                resolvedCount++;
+                                
+                                const isp = data.connection?.isp || 'Unknown';
+                                ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000);
                             }
                         } catch(e) {}
                     }
                     
-                    if (cacheUpdated) localStorage.setItem(CACHE_KEY, JSON.stringify(cachedGeo));
-                    setNodes([...updatedNodes]);
+                    if (cacheUpdated) {
+                        localStorage.setItem(CACHE_KEY, JSON.stringify(cachedGeo));
+                        setNodes([...updatedNodes]);
+                    }
 
-                    // ISP DATA FORMATTING FOR CHART
+                    // UPDATE ISP CHART
                     const sortedIsp = Object.entries(ispCounts)
                         .map(([name, value]) => ({ name, value }))
                         .sort((a, b) => b.value - a.value)
                         .slice(0, 5);
-                        
-                    setIspData(sortedIsp);
+                    
+                    if (sortedIsp.length > 0) setIspData(sortedIsp);
                 };
                 resolveGeo();
 
             } catch (e: any) {
-                addLog(`RPC Error: ${e.message}`, "alert");
+                addLog(`Connection Failed: ${e.message}`, "alert");
             }
         };
 
@@ -314,7 +330,7 @@ export default function Home() {
             <div className={`absolute top-0 left-0 w-full p-6 z-50 flex justify-between items-start transition-opacity duration-300 ${uiVisible ? 'opacity-100' : 'opacity-0'}`}>
                 <div className="flex flex-col gap-4">
                     <h1 className="text-4xl font-black tracking-tighter text-white drop-shadow-2xl flex items-center gap-2 select-none">
-                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">REALITY v5.3</span>
+                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">LIVE</span>
                     </h1>
                     <div className="flex bg-white/5 rounded-lg p-1 border border-white/10 backdrop-blur-md w-fit shadow-xl pointer-events-auto">
                         <TabButton active={viewMode === 'monitor'} onClick={() => setViewMode('monitor')} icon={<GlobeIcon size={14}/>} label="MONITOR" />
@@ -374,8 +390,8 @@ export default function Home() {
                                 ) : (
                                     <div className="h-64 flex flex-col items-center justify-center text-xs text-gray-600 border border-dashed border-white/10 rounded bg-white/[0.02]">
                                         <History size={24} className="mb-2 opacity-50"/>
-                                        <span>No Historical Data Yet</span>
-                                        <span className="text-[10px] mt-1 opacity-50">Is your CRON job running?</span>
+                                        <span>Initializing DB Connection...</span>
+                                        <span className="text-[9px] mt-1 opacity-50">Checking for records...</span>
                                     </div>
                                 )}
                             </div>
@@ -385,38 +401,27 @@ export default function Home() {
                         <div className="col-span-12 md:col-span-4 bg-[#0a0a0a] border border-white/10 rounded-xl p-5 flex flex-col shadow-lg min-h-[280px]">
                             <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-2"><Server size={14}/> ISP Concentration</h3>
                             
-                            {ispData.length > 0 ? (
-                                <>
-                                    {/* FIXED HEIGHT FOR CHART */}
-                                    <div className="h-64 w-full">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <PieChart>
-                                                <Pie data={ispData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
-                                                    {ispData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS.pie[index % COLORS.pie.length]} />)}
-                                                </Pie>
-                                                <Tooltip 
-                                                    contentStyle={{background: '#000', border: '1px solid #333', fontSize: '10px'}} 
-                                                    formatter={(value: number) => `${value.toFixed(1)}M SOL`}
-                                                />
-                                            </PieChart>
-                                        </ResponsiveContainer>
+                            <div className="h-64 w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie data={ispData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
+                                            {ispData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS.pie[index % COLORS.pie.length]} />)}
+                                        </Pie>
+                                        <Tooltip 
+                                            contentStyle={{background: '#000', border: '1px solid #333', fontSize: '10px'}} 
+                                            formatter={(value: number) => `${value.toFixed(1)}M SOL`}
+                                        />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                {ispData.slice(0,4).map((d,i) => (
+                                    <div key={i} className="flex justify-between text-[10px] text-gray-400 border-b border-white/5 pb-1">
+                                        <span className="truncate w-24" title={d.name}>{d.name}</span>
+                                        <span className="font-mono text-white" style={{color: COLORS.pie[i]}}>{d.value.toFixed(1)}M</span>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2 mt-2">
-                                        {ispData.slice(0,4).map((d,i) => (
-                                            <div key={i} className="flex justify-between text-[10px] text-gray-400 border-b border-white/5 pb-1">
-                                                <span className="truncate w-24" title={d.name}>{d.name}</span>
-                                                <span className="font-mono text-white" style={{color: COLORS.pie[i]}}>{d.value.toFixed(1)}M</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="flex-1 flex flex-col items-center justify-center text-xs text-gray-600 h-64 border border-dashed border-white/10 rounded bg-white/[0.02]">
-                                    <RefreshCw size={24} className="mb-2 opacity-50 animate-spin"/>
-                                    <span>Collecting ISP Data...</span>
-                                    <span className="text-[9px] text-gray-700 mt-2">Please wait 10-20 seconds</span>
-                                </div>
-                            )}
+                                ))}
+                            </div>
                         </div>
 
                         {/* NODE TABLE */}
