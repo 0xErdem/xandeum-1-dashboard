@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * XANDEUM.OS v5.1 - Intelligence Edition (Import Fix)
- */
-
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Connection } from '@solana/web3.js';
 import dynamic from 'next/dynamic';
@@ -24,7 +20,7 @@ import {
 
 const GlobeViz = dynamic(() => import('../components/GlobeViz'), { 
     ssr: false,
-    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">INITIALIZING INTELLIGENCE LAYER...</div>
+    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">LOADING 3D ENGINE...</div>
 });
 
 const RPC_ENDPOINT = "https://api.devnet.xandeum.com:8899";
@@ -50,11 +46,9 @@ interface NodeData {
     stakeDisplay: string;
     voteLag: number;
     skipRate: number;
-    // Real Metrics
     xriScore: number;
     efficiency: number;
     commission: number;
-    
     avatarColor: string;
 }
 
@@ -84,7 +78,6 @@ function stringToColor(str: string): string {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
 }
 
-// REALITY MODEL (XRI)
 function calculateRealMetrics(node: any, currentSlot: number) {
     let lag = 0;
     if (node.vote && currentSlot > 0) lag = Math.max(0, currentSlot - node.vote.lastVote);
@@ -116,13 +109,9 @@ export default function Home() {
     const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
     const [filter, setFilter] = useState('');
     const [uiVisible, setUiVisible] = useState(true);
-    
-    // Metrics
     const [metrics, setMetrics] = useState({ epoch: 0, slot: 0, tps: 0, activeStake: 0 });
     const [insights, setInsights] = useState<Insight[]>([]);
     const [logs, setLogs] = useState<string[]>([]);
-    
-    // Real Data Arrays
     const [dbHistory, setDbHistory] = useState<any[]>([]);
     const [ispData, setIspData] = useState<any[]>([]);
     const [latencyHistory, setLatencyHistory] = useState<any[]>([]);
@@ -134,7 +123,7 @@ export default function Home() {
         setLogs(prev => [`[${type.toUpperCase()}] ${msg} (${time})`, ...prev].slice(0, 50));
     }, []);
 
-    // SUPABASE HISTORY
+    // 1. Supabase History
     useEffect(() => {
         const fetchHistory = async () => {
             try {
@@ -147,7 +136,6 @@ export default function Home() {
                             time: new Date(d.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
                         })).reverse();
                         setDbHistory(formatted);
-                        if (dbHistory.length === 0) addLog("Supabase historical ledger loaded.", "success");
                     }
                 }
             } catch (e) {}
@@ -155,9 +143,9 @@ export default function Home() {
         fetchHistory();
         const interval = setInterval(fetchHistory, 60000);
         return () => clearInterval(interval);
-    }, [addLog, dbHistory.length]);
+    }, []);
 
-    // RPC LIVE DATA
+    // 2. RPC Data
     useEffect(() => {
         const initEngine = async () => {
             if (processingRef.current) return;
@@ -220,15 +208,17 @@ export default function Home() {
                 setNodes(processedNodes);
                 setMetrics(prev => ({ ...prev, activeStake: totalStake }));
                 
+                // Insights Logic
                 const newInsights: Insight[] = [];
                 const lowXRI = processedNodes.filter(n => n.xriScore < 50 && n.stake > 0).length;
-                if (lowXRI > 0) newInsights.push({ id: 1, type: 'critical', message: `${lowXRI} Nodes have degraded XRI Score (<50)`, action: 'Analyze Root Cause' });
-                if (realTPS < 1000) newInsights.push({ id: 2, type: 'warning', message: `Network Throughput Low (${realTPS.toFixed(0)} TPS)`, action: 'Check Leader Logs' });
+                if (lowXRI > 0) newInsights.push({ id: 1, type: 'critical', message: `${lowXRI} Nodes have degraded XRI Score`, action: 'Analyze Root Cause' });
+                if (realTPS < 1000) newInsights.push({ id: 2, type: 'warning', message: `Low Throughput (${realTPS.toFixed(0)} TPS)`, action: 'Check Leader Logs' });
                 else newInsights.push({ id: 2, type: 'optimization', message: 'Network Operating Optimally', action: 'View Metrics' });
-
                 setInsights(newInsights);
+
                 addLog(`Live Feed: ${processedNodes.length} nodes synced.`, "success");
 
+                // Geo Logic
                 const cachedGeo = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
                 let cacheUpdated = false;
                 const updatedNodes = [...processedNodes];
@@ -260,7 +250,7 @@ export default function Home() {
                     }
                     if (cacheUpdated) localStorage.setItem(CACHE_KEY, JSON.stringify(cachedGeo));
                     setNodes([...updatedNodes]);
-
+                    
                     const sortedIsp = Object.entries(ispCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
                     setIspData(sortedIsp);
                 };
@@ -280,6 +270,22 @@ export default function Home() {
         return () => clearInterval(interval);
     }, [addLog]);
 
+    // --- PERFORMANCE FIX: STABLE REFERENCES ---
+    
+    // 1. Node listesini harita için filtrele ve hafızada tut (Memoize)
+    // Sadece 'nodes' verisi değişirse yeniden hesapla.
+    const mapNodes = useMemo(() => {
+        return nodes.filter(n => n.lat !== 0);
+    }, [nodes]);
+
+    // 2. Click Handler'ı sabitle (Callback)
+    // Bu fonksiyon her renderda yeniden yaratılmayacak.
+    const handleNodeClick = useCallback((node: any) => {
+        setSelectedNode(node);
+        setUiVisible(true);
+    }, []);
+
+    // 3. UI Filters
     const displayedNodes = useMemo(() => {
         if (!filter) return nodes;
         const lower = filter.toLowerCase();
@@ -294,8 +300,10 @@ export default function Home() {
 
     return (
         <main className="relative w-full h-screen bg-[#02040a] overflow-hidden text-white font-sans selection:bg-cyan-500/30">
+            
+            {/* HARİTA: Artık sadece 'mapNodes' değişince render olacak */}
             <div className={`absolute inset-0 z-0 transition-all duration-1000 ${viewMode === 'analyst' ? 'opacity-20 blur-sm scale-105' : 'opacity-100'}`}>
-                <GlobeViz nodes={nodes.filter(n => n.lat !== 0)} onNodeClick={(n: any) => { setSelectedNode(n); setUiVisible(true); }} />
+                <GlobeViz nodes={mapNodes} onNodeClick={handleNodeClick} />
             </div>
 
             <div className={`absolute top-0 left-0 w-full p-6 z-50 flex justify-between items-start transition-opacity duration-300 ${uiVisible ? 'opacity-100' : 'opacity-0'}`}>
@@ -359,7 +367,6 @@ export default function Home() {
                             <StatCard title="Avg Latency" value="~400ms" sub="On Target" color="text-cyan-400" icon={<Activity size={16}/>} />
                             <StatCard title="Low XRI Nodes" value={riskStats.critical.toString()} sub="Needs Analysis" color={riskStats.critical > 0 ? "text-red-500" : "text-gray-400"} icon={<AlertCircle size={16}/>} />
                             
-                            {/* SUPABASE HISTORY CHART */}
                             <div className="col-span-3 bg-[#0a0a0a] border border-white/10 rounded-xl p-4 h-56 shadow-lg">
                                 <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Database size={14}/> Historical Network TPS (Supabase)</h3>
                                 {dbHistory.length > 0 ? (
