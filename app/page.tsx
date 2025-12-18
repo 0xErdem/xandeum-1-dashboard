@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * XANDEUM.OS v5.4 - FINAL DATA LINK
- * * FIXES:
- * - Added "Fallback Data" for ISP Chart (Prevents empty black box).
- * - Improved Date Parsing for Supabase History.
- * - Added Debug Logs to Console.
+ * XANDEUM.OS v6.0 - INTERACTIVE ANALYST
+ * * NEW FEATURES:
+ * - Table Sorting: Click headers to sort by Stake, Score, Lag, etc.
+ * - ISP Filtering: Click Pie Chart segments to filter the node list.
+ * - Multi-Metric History: Toggle between TPS, Stake, and Node Count charts.
  */
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
@@ -18,7 +18,8 @@ import {
     Globe as GlobeIcon, Search, ArrowUpRight, Eye, EyeOff, 
     AlertCircle, HeartPulse, TrendingUp, DollarSign, 
     BrainCircuit, Terminal as TerminalIcon, HardDrive, History, 
-    Cpu, Layers, Zap, Server, AlertTriangle, CheckCircle, Scale, RefreshCw
+    Cpu, Layers, Zap, Server, AlertTriangle, CheckCircle, Scale, RefreshCw,
+    Filter, ArrowUpDown, ChevronUp, ChevronDown, Users
 } from 'lucide-react';
 
 import { 
@@ -28,16 +29,16 @@ import {
 
 const GlobeViz = dynamic(() => import('../components/GlobeViz'), { 
     ssr: false,
-    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">INITIALIZING...</div>
+    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">LOADING INTELLIGENCE...</div>
 });
 
 const RPC_ENDPOINT = "https://api.devnet.xandeum.com:8899";
-const CACHE_KEY = 'xandeum_v5_final_fix';
+const CACHE_KEY = 'xandeum_v6_interact';
 
 const COLORS = {
     risk: { low: '#10b981', medium: '#f59e0b', high: '#ef4444', critical: '#7f1d1d' },
     brand: { primary: '#06b6d4', secondary: '#3b82f6', dark: '#02040a' },
-    pie: ['#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e']
+    pie: ['#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e', '#10b981', '#f59e0b']
 };
 
 interface NodeData {
@@ -116,19 +117,22 @@ export default function Home() {
     const [viewMode, setViewMode] = useState<'monitor' | 'analyst'>('monitor');
     const [nodes, setNodes] = useState<NodeData[]>([]);
     const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
-    const [filter, setFilter] = useState('');
     const [uiVisible, setUiVisible] = useState(true);
     
+    // --- INTERACTIVE STATES (NEW) ---
+    const [filter, setFilter] = useState('');
+    const [ispFilter, setIspFilter] = useState<string | null>(null); // Pasta grafikten filtreleme
+    const [sortConfig, setSortConfig] = useState<{ key: keyof NodeData, direction: 'asc' | 'desc' }>({ key: 'stake', direction: 'desc' });
+    const [chartMetric, setChartMetric] = useState<'tps' | 'stake' | 'node_count'>('tps');
+
+    // Metrics
     const [metrics, setMetrics] = useState({ epoch: 0, slot: 0, tps: 0, activeStake: 0 });
     const [insights, setInsights] = useState<Insight[]>([]);
     const [logs, setLogs] = useState<string[]>([]);
     
+    // Data Arrays
     const [dbHistory, setDbHistory] = useState<any[]>([]);
-    // Default Fallback Data for ISP to avoid "Empty Box"
-    const [ispData, setIspData] = useState<any[]>([
-        { name: 'Loading...', value: 100 }
-    ]);
-    const [latencyHistory, setLatencyHistory] = useState<any[]>([]);
+    const [ispData, setIspData] = useState<any[]>([{ name: 'Loading...', value: 100 }]);
     
     const processingRef = useRef(false);
 
@@ -137,46 +141,36 @@ export default function Home() {
         setLogs(prev => [`[${type.toUpperCase()}] ${msg} (${time})`, ...prev].slice(0, 50));
     }, []);
 
-    // 1. SUPABASE HISTORY FETCH
+    // 1. SUPABASE HISTORY
     useEffect(() => {
         const fetchHistory = async () => {
             try {
-                console.log("Fetching History...");
                 const res = await fetch('/api/get-history');
-                const data = await res.json();
-                
-                if (Array.isArray(data) && data.length > 0) {
-                    // Veriyi formatla: "2024-10-10T..." -> "14:30"
-                    const formatted = data.map((d: any) => {
-                        const date = new Date(d.time);
-                        return {
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data) && data.length > 0) {
+                        const formatted = data.map((d: any) => ({
                             ...d,
-                            time: date.getHours() + ':' + date.getMinutes().toString().padStart(2, '0')
-                        };
-                    });
-                    setDbHistory(formatted);
-                    if (dbHistory.length === 0) addLog("History Synced.", "success");
-                } else {
-                    console.warn("History data is empty array");
+                            time: new Date(d.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+                        })).reverse();
+                        setDbHistory(formatted);
+                    }
                 }
-            } catch (e) {
-                console.error("History Fetch Failed:", e);
-            }
+            } catch (e) {}
         };
         fetchHistory();
-        const interval = setInterval(fetchHistory, 30000);
+        const interval = setInterval(fetchHistory, 60000);
         return () => clearInterval(interval);
     }, []);
 
-    // 2. RPC DATA LOOP
-    // 2. RPC DATA LOOP & ISP FIX
+    // 2. RPC ENGINE
     useEffect(() => {
         const initEngine = async () => {
             if (processingRef.current) return;
             processingRef.current = true;
 
             try {
-                addLog("Connecting to Mainnet...", "info");
+                addLog("System Online. Querying RPC...", "info");
                 const connection = new Connection(RPC_ENDPOINT, "confirmed");
 
                 const [cluster, votes, production, epochInfo, perfSamples] = await Promise.all([
@@ -199,10 +193,9 @@ export default function Home() {
                 }));
 
                 const voteMap = new Map(votes.current.concat(votes.delinquent).map(v => [v.nodePubkey, v]));
-                
                 let totalStake = 0;
-                
-                // Process Nodes
+                let ispCounts: Record<string, number> = {};
+
                 const processedNodes: NodeData[] = cluster.map(rawNode => {
                     const vote = voteMap.get(rawNode.pubkey);
                     const prod = production?.value.byIdentity[rawNode.pubkey] || null;
@@ -226,51 +219,40 @@ export default function Home() {
                         commission: vote ? vote.commission : 0,
                         avatarColor: stringToColor(rawNode.pubkey)
                     };
-                }).sort((a, b) => b.stake - a.stake);
+                });
 
                 setNodes(processedNodes);
                 setMetrics(prev => ({ ...prev, activeStake: totalStake }));
                 
-                addLog(`Live Feed: ${processedNodes.length} nodes active.`, "success");
+                const newInsights: Insight[] = [];
+                if (realTPS < 1000) newInsights.push({ id: 2, type: 'warning', message: `Low TPS detected (${realTPS.toFixed(0)})`, action: 'Check Leader Logs' });
+                else newInsights.push({ id: 2, type: 'optimization', message: 'Network Performance Optimal', action: 'View Metrics' });
+                setInsights(newInsights);
 
-                // --- ISP & GEO FIX ---
+                addLog(`Synced ${processedNodes.length} validators.`, "success");
+
+                // GEO & ISP
                 const cachedGeo = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
                 let cacheUpdated = false;
                 const updatedNodes = [...processedNodes];
-                let ispCounts: Record<string, number> = {};
 
-                // Önce Cache'deki veriyi hızlıca yükle ve grafiği doldur
-                updatedNodes.forEach((node, i) => {
-                    if (node.ip && cachedGeo[node.ip]) {
-                        Object.assign(updatedNodes[i], cachedGeo[node.ip]);
-                        const isp = cachedGeo[node.ip].isp || 'Unknown';
-                        ispCounts[isp] = (ispCounts[isp] || 0) + (node.stake / 1000000000);
-                    }
-                });
-
-                // Cache verisiyle grafiği HEMEN çiz (Bekleme yapma)
-                const initialSortedIsp = Object.entries(ispCounts)
-                    .map(([name, value]) => ({ name, value }))
-                    .sort((a, b) => b.value - a.value)
-                    .slice(0, 5);
-                
-                if (initialSortedIsp.length > 0) {
-                    setIspData(initialSortedIsp);
-                }
-
-                // Sonra yavaş yavaş eksikleri tamamla
                 const resolveGeo = async () => {
-                    let apiCalls = 0;
+                    let calls = 0;
                     for (let i = 0; i < updatedNodes.length; i++) {
                         const n = updatedNodes[i];
-                        // Cache'de varsa veya IP yoksa atla
-                        if (!n.ip || cachedGeo[n.ip] || n.ip.startsWith('10.') || n.ip.startsWith('127.')) continue;
+                        if (!n.ip || n.ip.startsWith('10.') || n.ip.startsWith('127.')) continue;
 
-                        // Rate Limit koruması: Her seferde en fazla 3 yeni IP çöz
-                        if (apiCalls > 3) break; 
+                        if (cachedGeo[n.ip]) {
+                            Object.assign(updatedNodes[i], cachedGeo[n.ip]);
+                            const isp = cachedGeo[n.ip].isp || 'Unknown';
+                            if(isp !== 'Unknown') ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000);
+                            continue;
+                        }
+
+                        if (calls > 5) break; 
 
                         try {
-                            await new Promise(r => setTimeout(r, 300)); // Nazik bekleme
+                            await new Promise(r => setTimeout(r, 200));
                             const res = await fetch(`https://ipwho.is/${n.ip}`);
                             const data = await res.json();
                             if (data.success) {
@@ -278,25 +260,22 @@ export default function Home() {
                                 cachedGeo[n.ip] = geoInfo;
                                 Object.assign(updatedNodes[i], geoInfo);
                                 cacheUpdated = true;
-                                apiCalls++;
-                                
+                                calls++;
                                 const isp = data.connection?.isp || 'Unknown';
                                 ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000);
                             }
                         } catch(e) {}
                     }
                     
-                    if (cacheUpdated) {
-                        localStorage.setItem(CACHE_KEY, JSON.stringify(cachedGeo));
-                        setNodes([...updatedNodes]);
-                        
-                        // Grafiği güncelle
-                        const finalSortedIsp = Object.entries(ispCounts)
-                            .map(([name, value]) => ({ name, value }))
-                            .sort((a, b) => b.value - a.value)
-                            .slice(0, 5);
-                        setIspData(finalSortedIsp);
-                    }
+                    if (cacheUpdated) localStorage.setItem(CACHE_KEY, JSON.stringify(cachedGeo));
+                    setNodes([...updatedNodes]);
+
+                    const sortedIsp = Object.entries(ispCounts)
+                        .map(([name, value]) => ({ name, value }))
+                        .sort((a, b) => b.value - a.value)
+                        .slice(0, 5);
+                    
+                    if (sortedIsp.length > 0) setIspData(sortedIsp);
                 };
                 resolveGeo();
 
@@ -306,28 +285,61 @@ export default function Home() {
         };
 
         initEngine();
-
         const interval = setInterval(() => {
-            setLatencyHistory(prev => [...prev.slice(-30), { time: '', val: 40 + Math.random() * 20 }]);
             setMetrics(prev => ({ ...prev, slot: prev.slot + 1 }));
         }, 400);
         return () => clearInterval(interval);
     }, [addLog]);
 
-    const mapNodes = useMemo(() => {
-        return nodes.filter(n => n.lat !== 0);
-    }, [nodes]);
+    // --- INTERACTIVE LOGIC ---
+
+    const mapNodes = useMemo(() => nodes.filter(n => n.lat !== 0), [nodes]);
 
     const handleNodeClick = useCallback((node: any) => {
         setSelectedNode(node);
         setUiVisible(true);
     }, []);
 
+    const handleSort = (key: keyof NodeData) => {
+        setSortConfig(current => ({
+            key,
+            direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc'
+        }));
+    };
+
     const displayedNodes = useMemo(() => {
-        if (!filter) return nodes;
-        const lower = filter.toLowerCase();
-        return nodes.filter(n => n.name.toLowerCase().includes(lower) || n.city?.toLowerCase().includes(lower));
-    }, [nodes, filter]);
+        let result = [...nodes];
+
+        // 1. Search Filter
+        if (filter) {
+            const lower = filter.toLowerCase();
+            result = result.filter(n => n.name.toLowerCase().includes(lower) || n.city?.toLowerCase().includes(lower));
+        }
+
+        // 2. ISP Filter (New)
+        if (ispFilter) {
+            result = result.filter(n => n.isp === ispFilter);
+        }
+
+        // 3. Sorting (New)
+        result.sort((a, b) => {
+            const valA = a[sortConfig.key];
+            const valB = b[sortConfig.key];
+            
+            // Handle null/undefined
+            if (valA === valB) return 0;
+            if (valA === null || valA === undefined) return 1;
+            if (valB === null || valB === undefined) return -1;
+
+            if (sortConfig.direction === 'asc') {
+                return valA < valB ? -1 : 1;
+            } else {
+                return valA > valB ? -1 : 1;
+            }
+        });
+
+        return result;
+    }, [nodes, filter, ispFilter, sortConfig]);
 
     const riskStats = useMemo(() => ({
         critical: nodes.filter(n => n.xriScore < 50).length,
@@ -342,10 +354,11 @@ export default function Home() {
                 <GlobeViz nodes={mapNodes} onNodeClick={handleNodeClick} />
             </div>
 
+            {/* HEADER */}
             <div className={`absolute top-0 left-0 w-full p-6 z-50 flex justify-between items-start transition-opacity duration-300 ${uiVisible ? 'opacity-100' : 'opacity-0'}`}>
                 <div className="flex flex-col gap-4">
                     <h1 className="text-4xl font-black tracking-tighter text-white drop-shadow-2xl flex items-center gap-2 select-none">
-                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">LIVE</span>
+                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">v6.0 ANALYST</span>
                     </h1>
                     <div className="flex bg-white/5 rounded-lg p-1 border border-white/10 backdrop-blur-md w-fit shadow-xl pointer-events-auto">
                         <TabButton active={viewMode === 'monitor'} onClick={() => setViewMode('monitor')} icon={<GlobeIcon size={14}/>} label="MONITOR" />
@@ -366,96 +379,150 @@ export default function Home() {
                 {uiVisible ? <EyeOff size={20}/> : <Eye size={20}/>}
             </button>
 
-            {/* MONITOR MODE SIDEBAR */}
+            {/* MONITOR SIDEBAR */}
             {viewMode === 'monitor' && uiVisible && (
                 <div className="absolute top-40 right-6 w-80 flex flex-col gap-4 z-40 pointer-events-auto animate-in slide-in-from-right-10">
-                    <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl h-96 flex flex-col">
-                        <div className="p-3 border-b border-white/10"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Activity size={14}/> Live Feed</h3></div>
+                    <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+                        <div className="p-3 border-b border-white/10 bg-gradient-to-r from-cyan-900/20 to-transparent flex justify-between items-center">
+                            <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2"><BrainCircuit size={14}/> XRI Insights</h3>
+                            <span className="text-[10px] bg-cyan-500/20 px-1.5 py-0.5 rounded text-cyan-300">{insights.length}</span>
+                        </div>
+                        <div className="p-3 space-y-2">
+                            {insights.map(insight => (
+                                <div key={insight.id} className="bg-white/5 p-3 rounded-lg border border-white/5 hover:border-cyan-500/30 transition group cursor-pointer">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        {insight.type === 'critical' ? <AlertTriangle size={12} className="text-red-500"/> : <Zap size={12} className="text-yellow-500"/>}
+                                        <span className={`text-[10px] font-bold uppercase ${insight.type === 'critical' ? 'text-red-400' : 'text-yellow-400'}`}>{insight.type}</span>
+                                    </div>
+                                    <div className="text-xs text-gray-200 font-medium leading-tight mb-2">{insight.message}</div>
+                                    <div className="text-[10px] text-cyan-400 group-hover:underline flex items-center gap-1">ACTION: {insight.action} <ArrowUpRight size={10}/></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl h-48 flex flex-col">
+                        <div className="p-3 border-b border-white/10"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Activity size={14}/> Critical Log</h3></div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
-                            {logs.map((log, i) => <div key={i} className="text-[10px] truncate text-gray-400">{log}</div>)}
+                            {logs.map((log, i) => (
+                                <div key={i} className={`text-[10px] truncate ${log.includes('ALERT') ? 'text-red-400' : 'text-gray-500'}`}>{log}</div>
+                            ))}
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ANALYST MODE DASHBOARD */}
+            {/* ANALYST DASHBOARD */}
             {viewMode === 'analyst' && (
-                <div className="absolute inset-0 z-40 pt-32 px-6 pb-6 overflow-y-auto custom-scrollbar bg-[#050505]/90 backdrop-blur-md animate-in fade-in">
+                <div className="absolute inset-0 z-40 pt-32 px-6 pb-6 overflow-y-auto custom-scrollbar bg-[#050505]/95 backdrop-blur-md animate-in fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pointer-events-auto max-w-[1600px] mx-auto">
+                        
+                        {/* 1. KEY METRICS */}
                         <div className="col-span-12 md:col-span-8 grid grid-cols-3 gap-4">
                             <StatCard title="XRI Network Score" value="94/100" sub="Optimal" color="text-green-400" icon={<Shield size={16}/>} />
                             <StatCard title="Avg Latency" value="~400ms" sub="On Target" color="text-cyan-400" icon={<Activity size={16}/>} />
                             <StatCard title="Low XRI Nodes" value={riskStats.critical.toString()} sub="Needs Analysis" color={riskStats.critical > 0 ? "text-red-500" : "text-gray-400"} icon={<AlertCircle size={16}/>} />
                             
-                            {/* HISTORICAL CHART (SUPABASE) */}
+                            {/* MULTI-METRIC HISTORY CHART */}
                             <div className="col-span-3 bg-[#0a0a0a] border border-white/10 rounded-xl p-4 shadow-lg min-h-[280px]">
-                                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Database size={14}/> Historical Network TPS (Supabase)</h3>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase flex items-center gap-2"><History size={14}/> Network History</h3>
+                                    <div className="flex gap-2">
+                                        <ChartToggle active={chartMetric === 'tps'} label="TPS" onClick={() => setChartMetric('tps')} />
+                                        <ChartToggle active={chartMetric === 'stake'} label="Stake" onClick={() => setChartMetric('stake')} />
+                                        <ChartToggle active={chartMetric === 'node_count'} label="Nodes" onClick={() => setChartMetric('node_count')} />
+                                    </div>
+                                </div>
                                 {dbHistory.length > 0 ? (
                                     <div className="h-64 w-full -ml-2 pb-4">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={dbHistory}>
-                                                <defs><linearGradient id="colorTps" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient></defs>
+                                                <defs><linearGradient id="colorMetric" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/><stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/></linearGradient></defs>
                                                 <XAxis dataKey="time" hide />
                                                 <YAxis domain={['auto', 'auto']} hide />
                                                 <Tooltip contentStyle={{background: '#000', border: '1px solid #333', fontSize: '10px'}} />
-                                                <Area type="monotone" dataKey="tps" stroke="#10b981" strokeWidth={2} fill="url(#colorTps)" />
+                                                <Area 
+                                                    type="monotone" 
+                                                    dataKey={chartMetric} 
+                                                    stroke="#06b6d4" 
+                                                    strokeWidth={2} 
+                                                    fill="url(#colorMetric)" 
+                                                    animationDuration={500}
+                                                />
                                             </AreaChart>
                                         </ResponsiveContainer>
                                     </div>
                                 ) : (
                                     <div className="h-64 flex flex-col items-center justify-center text-xs text-gray-600 border border-dashed border-white/10 rounded bg-white/[0.02]">
-                                        <History size={24} className="mb-2 opacity-50"/>
-                                        <span>Initializing DB Connection...</span>
-                                        <span className="text-[9px] mt-1 opacity-50">Checking for records...</span>
+                                        <RefreshCw size={24} className="mb-2 opacity-50 animate-spin"/>
+                                        <span>Syncing Database...</span>
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* ISP CONCENTRATION CHART */}
+                        {/* 2. INTERACTIVE ISP CHART */}
                         <div className="col-span-12 md:col-span-4 bg-[#0a0a0a] border border-white/10 rounded-xl p-5 flex flex-col shadow-lg min-h-[280px]">
-                            <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-2"><Server size={14}/> ISP Concentration</h3>
+                            <div className="flex justify-between items-center mb-2">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase flex items-center gap-2"><Server size={14}/> ISP Concentration</h3>
+                                {ispFilter && (
+                                    <button onClick={() => setIspFilter(null)} className="text-[9px] flex items-center gap-1 text-red-400 hover:text-red-300">
+                                        <X size={10}/> Clear Filter
+                                    </button>
+                                )}
+                            </div>
                             
-                            <div className="h-64 w-full">
+                            <div className="h-64 w-full cursor-pointer relative group">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
-                                        <Pie data={ispData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
-                                            {ispData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS.pie[index % COLORS.pie.length]} />)}
+                                        <Pie 
+                                            data={ispData} 
+                                            innerRadius={60} 
+                                            outerRadius={80} 
+                                            paddingAngle={5} 
+                                            dataKey="value" 
+                                            stroke="none"
+                                            onClick={(data) => setIspFilter(data.name === 'Loading...' ? null : data.name)}
+                                        >
+                                            {ispData.map((entry, index) => (
+                                                <Cell 
+                                                    key={`cell-${index}`} 
+                                                    fill={ispFilter && ispFilter !== entry.name ? '#333' : COLORS.pie[index % COLORS.pie.length]} 
+                                                    className="transition-all duration-300 hover:opacity-80"
+                                                />
+                                            ))}
                                         </Pie>
-                                        <Tooltip 
-                                            contentStyle={{background: '#000', border: '1px solid #333', fontSize: '10px'}} 
-                                            formatter={(value: number) => `${value.toFixed(1)}M SOL`}
-                                        />
+                                        <Tooltip contentStyle={{background: '#000', border: '1px solid #333', fontSize: '10px'}} />
                                     </PieChart>
                                 </ResponsiveContainer>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 mt-2">
-                                {ispData.slice(0,4).map((d,i) => (
-                                    <div key={i} className="flex justify-between text-[10px] text-gray-400 border-b border-white/5 pb-1">
-                                        <span className="truncate w-24" title={d.name}>{d.name}</span>
-                                        <span className="font-mono text-white" style={{color: COLORS.pie[i]}}>{d.value.toFixed(1)}M</span>
-                                    </div>
-                                ))}
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                    <span className="text-xs text-gray-500 font-mono">{ispFilter || 'ALL'}</span>
+                                </div>
                             </div>
                         </div>
 
-                        {/* NODE TABLE */}
+                        {/* 3. SORTABLE NODE TABLE */}
                         <div className="col-span-12 bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-xl min-h-[500px] flex flex-col">
                             <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
-                                <h2 className="text-sm font-bold text-white flex items-center gap-2"><Database size={16} className="text-cyan-500"/> REAL-TIME NODE MATRIX</h2>
+                                <div className="flex items-center gap-4">
+                                    <h2 className="text-sm font-bold text-white flex items-center gap-2"><Database size={16} className="text-cyan-500"/> NODE MATRIX</h2>
+                                    {ispFilter && <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded flex items-center gap-1">Filtered: {ispFilter} <X size={10} className="cursor-pointer" onClick={() => setIspFilter(null)}/></span>}
+                                </div>
                                 <div className="relative w-64">
                                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"/>
                                     <input type="text" placeholder="Search Node..." className="w-full bg-black border border-white/10 rounded-lg py-1.5 pl-9 pr-3 text-xs text-white focus:border-cyan-500 outline-none transition" value={filter} onChange={e => setFilter(e.target.value)} />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-black/40 border-b border-white/5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                                <div className="col-span-3">Identity / Location</div>
-                                <div className="col-span-2 text-right">Stake</div>
-                                <div className="col-span-2 text-center">XRI Score</div>
-                                <div className="col-span-2 text-center">Lag / Skip</div>
-                                <div className="col-span-2">ISP</div>
+                            
+                            {/* Clickable Headers */}
+                            <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-black/40 border-b border-white/5 text-[10px] font-bold text-gray-500 uppercase tracking-wider select-none">
+                                <div className="col-span-3 cursor-pointer hover:text-white flex items-center gap-1" onClick={() => handleSort('name')}>Identity <SortIcon active={sortConfig.key === 'name'} dir={sortConfig.direction} /></div>
+                                <div className="col-span-2 text-right cursor-pointer hover:text-white flex items-center justify-end gap-1" onClick={() => handleSort('stake')}>Stake <SortIcon active={sortConfig.key === 'stake'} dir={sortConfig.direction} /></div>
+                                <div className="col-span-2 text-center cursor-pointer hover:text-white flex items-center justify-center gap-1" onClick={() => handleSort('xriScore')}>XRI Score <SortIcon active={sortConfig.key === 'xriScore'} dir={sortConfig.direction} /></div>
+                                <div className="col-span-2 text-center cursor-pointer hover:text-white flex items-center justify-center gap-1" onClick={() => handleSort('voteLag')}>Lag <SortIcon active={sortConfig.key === 'voteLag'} dir={sortConfig.direction} /></div>
+                                <div className="col-span-2 cursor-pointer hover:text-white flex items-center gap-1" onClick={() => handleSort('isp')}>ISP <SortIcon active={sortConfig.key === 'isp'} dir={sortConfig.direction} /></div>
                                 <div className="col-span-1"></div>
                             </div>
+
                             <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/20">
                                 {displayedNodes.map((node) => (
                                     <div key={node.pubkey} className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition items-center group text-xs">
@@ -540,3 +607,5 @@ function RiskBadge({ score }: { score: number }) {
 function MetricRow({ label, value, max, color, inverse = false }: any) { const numVal = parseFloat(value); const pct = Math.min(100, (numVal / max) * 100); return <div><div className="flex justify-between text-xs mb-1"><span className="text-gray-400">{label}</span><span className="font-mono text-white">{value}</span></div><div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden"><div className={`h-full ${color}`} style={{width: `${pct}%`}}></div></div></div>; }
 function HardwareDial({ label, value }: any) { return <div className="flex flex-col items-center justify-center p-3 bg-black/20 rounded-lg"><div className="relative w-16 h-16 flex items-center justify-center"><svg className="w-full h-full transform -rotate-90"><circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-gray-800" /><circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" strokeDasharray={175} strokeDashoffset={175 - (175 * value) / 100} className="text-cyan-500" /></svg><span className="absolute text-xs font-bold text-white">{value.toFixed(0)}%</span></div><span className="text-[10px] text-gray-500 uppercase font-bold mt-2">{label}</span></div>; }
 function DetailBox({ label, value }: any) { return <div className="p-3 bg-white/5 rounded-lg border border-white/5"><div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{label}</div><div className="text-white font-mono text-sm truncate">{value || '-'}</div></div>; }
+function SortIcon({ active, dir }: any) { return active ? (dir === 'asc' ? <ChevronUp size={10}/> : <ChevronDown size={10}/>) : <ArrowUpDown size={10} className="opacity-30"/>; }
+function ChartToggle({ active, label, onClick }: any) { return <button onClick={onClick} className={`text-[10px] px-2 py-1 rounded border ${active ? 'bg-cyan-500 text-black border-cyan-500' : 'bg-transparent text-gray-500 border-white/10 hover:border-white/30'}`}>{label}</button>; }
