@@ -1,11 +1,10 @@
 'use client';
 
 /**
- * XANDEUM.OS v5.2 - VISUAL STABILITY PATCH
+ * XANDEUM.OS v5.3 - DEBUG EDITION
  * * FIXES:
- * - Fixed Chart Heights (PieChart disappearing issue).
- * - Added "Waiting for Data" states for empty graphs.
- * - Improved color contrast for charts.
+ * - Changed CACHE_KEY to force fresh ISP data fetch.
+ * - Added explicit checks for empty data arrays.
  */
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
@@ -28,16 +27,17 @@ import {
 
 const GlobeViz = dynamic(() => import('../components/GlobeViz'), { 
     ssr: false,
-    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">INITIALIZING INTELLIGENCE LAYER...</div>
+    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">CONNECTING...</div>
 });
 
 const RPC_ENDPOINT = "https://api.devnet.xandeum.com:8899";
-const CACHE_KEY = 'xandeum_v4_intel';
+// CRITICAL: Cache key changed to force fresh data fetch
+const CACHE_KEY = 'xandeum_v5_force_clean_v2'; 
 
 const COLORS = {
     risk: { low: '#10b981', medium: '#f59e0b', high: '#ef4444', critical: '#7f1d1d' },
     brand: { primary: '#06b6d4', secondary: '#3b82f6', dark: '#02040a' },
-    pie: ['#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'] // Parlak renkler
+    pie: ['#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e', '#10b981']
 };
 
 interface NodeData {
@@ -87,7 +87,6 @@ function stringToColor(str: string): string {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
 }
 
-// REALITY MODEL (XRI)
 function calculateRealMetrics(node: any, currentSlot: number) {
     let lag = 0;
     if (node.vote && currentSlot > 0) lag = Math.max(0, currentSlot - node.vote.lastVote);
@@ -120,12 +119,10 @@ export default function Home() {
     const [filter, setFilter] = useState('');
     const [uiVisible, setUiVisible] = useState(true);
     
-    // Metrics
     const [metrics, setMetrics] = useState({ epoch: 0, slot: 0, tps: 0, activeStake: 0 });
     const [insights, setInsights] = useState<Insight[]>([]);
     const [logs, setLogs] = useState<string[]>([]);
     
-    // Real Data Arrays
     const [dbHistory, setDbHistory] = useState<any[]>([]);
     const [ispData, setIspData] = useState<any[]>([]);
     const [latencyHistory, setLatencyHistory] = useState<any[]>([]);
@@ -137,7 +134,7 @@ export default function Home() {
         setLogs(prev => [`[${type.toUpperCase()}] ${msg} (${time})`, ...prev].slice(0, 50));
     }, []);
 
-    // SUPABASE HISTORY
+    // 1. SUPABASE HISTORY
     useEffect(() => {
         const fetchHistory = async () => {
             try {
@@ -152,14 +149,16 @@ export default function Home() {
                         setDbHistory(formatted);
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error("History error", e);
+            }
         };
         fetchHistory();
         const interval = setInterval(fetchHistory, 60000);
         return () => clearInterval(interval);
-    }, [addLog, dbHistory.length]);
+    }, []);
 
-    // RPC LIVE DATA
+    // 2. RPC DATA
     useEffect(() => {
         const initEngine = async () => {
             if (processingRef.current) return;
@@ -222,15 +221,7 @@ export default function Home() {
                 setNodes(processedNodes);
                 setMetrics(prev => ({ ...prev, activeStake: totalStake }));
                 
-                const newInsights: Insight[] = [];
-                const lowXRI = processedNodes.filter(n => n.xriScore < 50 && n.stake > 0).length;
-                if (lowXRI > 0) newInsights.push({ id: 1, type: 'critical', message: `${lowXRI} Nodes have degraded XRI Score (<50)`, action: 'Analyze Root Cause' });
-                if (realTPS < 1000) newInsights.push({ id: 2, type: 'warning', message: `Low Throughput (${realTPS.toFixed(0)} TPS)`, action: 'Check Leader Logs' });
-                else newInsights.push({ id: 2, type: 'optimization', message: 'Network Operating Optimally', action: 'View Metrics' });
-
-                setInsights(newInsights);
-                addLog(`Live Feed: ${processedNodes.length} nodes synced.`, "success");
-
+                // GEO LOGIC
                 const cachedGeo = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
                 let cacheUpdated = false;
                 const updatedNodes = [...processedNodes];
@@ -240,15 +231,19 @@ export default function Home() {
                         const n = updatedNodes[i];
                         if (!n.ip || n.ip.startsWith('10.') || n.ip.startsWith('127.')) continue;
 
+                        // Cache Hit?
                         if (cachedGeo[n.ip]) {
                             Object.assign(updatedNodes[i], cachedGeo[n.ip]);
-                            const isp = cachedGeo[n.ip].isp || 'Unknown';
-                            ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000);
+                            const isp = cachedGeo[n.ip].isp || 'Unknown ISP';
+                            if (isp !== 'Unknown ISP') {
+                                ispCounts[isp] = (ispCounts[isp] || 0) + (n.stake / 1000000000);
+                            }
                             continue;
                         }
 
+                        // API Fetch
                         try {
-                            await new Promise(r => setTimeout(r, 200));
+                            await new Promise(r => setTimeout(r, 150));
                             const res = await fetch(`https://ipwho.is/${n.ip}`);
                             const data = await res.json();
                             if (data.success) {
@@ -260,10 +255,16 @@ export default function Home() {
                             }
                         } catch(e) {}
                     }
+                    
                     if (cacheUpdated) localStorage.setItem(CACHE_KEY, JSON.stringify(cachedGeo));
                     setNodes([...updatedNodes]);
 
-                    const sortedIsp = Object.entries(ispCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
+                    // ISP DATA FORMATTING FOR CHART
+                    const sortedIsp = Object.entries(ispCounts)
+                        .map(([name, value]) => ({ name, value }))
+                        .sort((a, b) => b.value - a.value)
+                        .slice(0, 5);
+                        
                     setIspData(sortedIsp);
                 };
                 resolveGeo();
@@ -313,7 +314,7 @@ export default function Home() {
             <div className={`absolute top-0 left-0 w-full p-6 z-50 flex justify-between items-start transition-opacity duration-300 ${uiVisible ? 'opacity-100' : 'opacity-0'}`}>
                 <div className="flex flex-col gap-4">
                     <h1 className="text-4xl font-black tracking-tighter text-white drop-shadow-2xl flex items-center gap-2 select-none">
-                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">REALITY ENGINE</span>
+                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">REALITY v5.3</span>
                     </h1>
                     <div className="flex bg-white/5 rounded-lg p-1 border border-white/10 backdrop-blur-md w-fit shadow-xl pointer-events-auto">
                         <TabButton active={viewMode === 'monitor'} onClick={() => setViewMode('monitor')} icon={<GlobeIcon size={14}/>} label="MONITOR" />
@@ -337,25 +338,7 @@ export default function Home() {
             {/* MONITOR MODE SIDEBAR */}
             {viewMode === 'monitor' && uiVisible && (
                 <div className="absolute top-40 right-6 w-80 flex flex-col gap-4 z-40 pointer-events-auto animate-in slide-in-from-right-10">
-                    <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-                        <div className="p-3 border-b border-white/10 bg-gradient-to-r from-cyan-900/20 to-transparent flex justify-between items-center">
-                            <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2"><BrainCircuit size={14}/> XRI Insights</h3>
-                            <span className="text-[10px] bg-cyan-500/20 px-1.5 py-0.5 rounded text-cyan-300">{insights.length}</span>
-                        </div>
-                        <div className="p-3 space-y-2">
-                            {insights.map(insight => (
-                                <div key={insight.id} className="bg-white/5 p-3 rounded-lg border border-white/5 hover:border-cyan-500/30 transition group cursor-pointer">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        {insight.type === 'critical' ? <AlertTriangle size={12} className="text-red-500"/> : <Zap size={12} className="text-yellow-500"/>}
-                                        <span className={`text-[10px] font-bold uppercase ${insight.type === 'critical' ? 'text-red-400' : 'text-yellow-400'}`}>{insight.type}</span>
-                                    </div>
-                                    <div className="text-xs text-gray-200 font-medium leading-tight mb-2">{insight.message}</div>
-                                    <div className="text-[10px] text-cyan-400 group-hover:underline flex items-center gap-1">ACTION: {insight.action} <ArrowUpRight size={10}/></div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl h-48 flex flex-col">
+                    <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl h-96 flex flex-col">
                         <div className="p-3 border-b border-white/10"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Activity size={14}/> Live Feed</h3></div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
                             {logs.map((log, i) => <div key={i} className="text-[10px] truncate text-gray-400">{log}</div>)}
@@ -374,7 +357,7 @@ export default function Home() {
                             <StatCard title="Low XRI Nodes" value={riskStats.critical.toString()} sub="Needs Analysis" color={riskStats.critical > 0 ? "text-red-500" : "text-gray-400"} icon={<AlertCircle size={16}/>} />
                             
                             {/* HISTORICAL CHART (SUPABASE) */}
-                            <div className="col-span-3 bg-[#0a0a0a] border border-white/10 rounded-xl p-4 shadow-lg min-h-[250px]">
+                            <div className="col-span-3 bg-[#0a0a0a] border border-white/10 rounded-xl p-4 shadow-lg min-h-[280px]">
                                 <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Database size={14}/> Historical Network TPS (Supabase)</h3>
                                 {dbHistory.length > 0 ? (
                                     <div className="h-64 w-full -ml-2 pb-4">
@@ -392,14 +375,14 @@ export default function Home() {
                                     <div className="h-64 flex flex-col items-center justify-center text-xs text-gray-600 border border-dashed border-white/10 rounded bg-white/[0.02]">
                                         <History size={24} className="mb-2 opacity-50"/>
                                         <span>No Historical Data Yet</span>
-                                        <span className="text-[10px] mt-1 opacity-50">Data will appear after the first CRON snapshot</span>
+                                        <span className="text-[10px] mt-1 opacity-50">Is your CRON job running?</span>
                                     </div>
                                 )}
                             </div>
                         </div>
 
                         {/* ISP CONCENTRATION CHART */}
-                        <div className="col-span-12 md:col-span-4 bg-[#0a0a0a] border border-white/10 rounded-xl p-5 flex flex-col shadow-lg min-h-[250px]">
+                        <div className="col-span-12 md:col-span-4 bg-[#0a0a0a] border border-white/10 rounded-xl p-5 flex flex-col shadow-lg min-h-[280px]">
                             <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-2"><Server size={14}/> ISP Concentration</h3>
                             
                             {ispData.length > 0 ? (
@@ -430,7 +413,8 @@ export default function Home() {
                             ) : (
                                 <div className="flex-1 flex flex-col items-center justify-center text-xs text-gray-600 h-64 border border-dashed border-white/10 rounded bg-white/[0.02]">
                                     <RefreshCw size={24} className="mb-2 opacity-50 animate-spin"/>
-                                    <span>Resolving Geo Data...</span>
+                                    <span>Collecting ISP Data...</span>
+                                    <span className="text-[9px] text-gray-700 mt-2">Please wait 10-20 seconds</span>
                                 </div>
                             )}
                         </div>
