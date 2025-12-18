@@ -1,5 +1,13 @@
 'use client';
 
+/**
+ * XANDEUM.OS v5.2 - VISUAL STABILITY PATCH
+ * * FIXES:
+ * - Fixed Chart Heights (PieChart disappearing issue).
+ * - Added "Waiting for Data" states for empty graphs.
+ * - Improved color contrast for charts.
+ */
+
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Connection } from '@solana/web3.js';
 import dynamic from 'next/dynamic';
@@ -10,7 +18,7 @@ import {
     Globe as GlobeIcon, Search, ArrowUpRight, Eye, EyeOff, 
     AlertCircle, HeartPulse, TrendingUp, DollarSign, 
     BrainCircuit, Terminal as TerminalIcon, HardDrive, History, 
-    Cpu, Layers, Zap, Server, AlertTriangle, CheckCircle, Scale
+    Cpu, Layers, Zap, Server, AlertTriangle, CheckCircle, Scale, RefreshCw
 } from 'lucide-react';
 
 import { 
@@ -20,7 +28,7 @@ import {
 
 const GlobeViz = dynamic(() => import('../components/GlobeViz'), { 
     ssr: false,
-    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">LOADING 3D ENGINE...</div>
+    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">INITIALIZING INTELLIGENCE LAYER...</div>
 });
 
 const RPC_ENDPOINT = "https://api.devnet.xandeum.com:8899";
@@ -28,7 +36,8 @@ const CACHE_KEY = 'xandeum_v4_intel';
 
 const COLORS = {
     risk: { low: '#10b981', medium: '#f59e0b', high: '#ef4444', critical: '#7f1d1d' },
-    brand: { primary: '#06b6d4', secondary: '#3b82f6', dark: '#02040a' }
+    brand: { primary: '#06b6d4', secondary: '#3b82f6', dark: '#02040a' },
+    pie: ['#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'] // Parlak renkler
 };
 
 interface NodeData {
@@ -78,6 +87,7 @@ function stringToColor(str: string): string {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
 }
 
+// REALITY MODEL (XRI)
 function calculateRealMetrics(node: any, currentSlot: number) {
     let lag = 0;
     if (node.vote && currentSlot > 0) lag = Math.max(0, currentSlot - node.vote.lastVote);
@@ -109,9 +119,13 @@ export default function Home() {
     const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
     const [filter, setFilter] = useState('');
     const [uiVisible, setUiVisible] = useState(true);
+    
+    // Metrics
     const [metrics, setMetrics] = useState({ epoch: 0, slot: 0, tps: 0, activeStake: 0 });
     const [insights, setInsights] = useState<Insight[]>([]);
     const [logs, setLogs] = useState<string[]>([]);
+    
+    // Real Data Arrays
     const [dbHistory, setDbHistory] = useState<any[]>([]);
     const [ispData, setIspData] = useState<any[]>([]);
     const [latencyHistory, setLatencyHistory] = useState<any[]>([]);
@@ -123,7 +137,7 @@ export default function Home() {
         setLogs(prev => [`[${type.toUpperCase()}] ${msg} (${time})`, ...prev].slice(0, 50));
     }, []);
 
-    // 1. Supabase History
+    // SUPABASE HISTORY
     useEffect(() => {
         const fetchHistory = async () => {
             try {
@@ -143,9 +157,9 @@ export default function Home() {
         fetchHistory();
         const interval = setInterval(fetchHistory, 60000);
         return () => clearInterval(interval);
-    }, []);
+    }, [addLog, dbHistory.length]);
 
-    // 2. RPC Data
+    // RPC LIVE DATA
     useEffect(() => {
         const initEngine = async () => {
             if (processingRef.current) return;
@@ -208,17 +222,15 @@ export default function Home() {
                 setNodes(processedNodes);
                 setMetrics(prev => ({ ...prev, activeStake: totalStake }));
                 
-                // Insights Logic
                 const newInsights: Insight[] = [];
                 const lowXRI = processedNodes.filter(n => n.xriScore < 50 && n.stake > 0).length;
-                if (lowXRI > 0) newInsights.push({ id: 1, type: 'critical', message: `${lowXRI} Nodes have degraded XRI Score`, action: 'Analyze Root Cause' });
+                if (lowXRI > 0) newInsights.push({ id: 1, type: 'critical', message: `${lowXRI} Nodes have degraded XRI Score (<50)`, action: 'Analyze Root Cause' });
                 if (realTPS < 1000) newInsights.push({ id: 2, type: 'warning', message: `Low Throughput (${realTPS.toFixed(0)} TPS)`, action: 'Check Leader Logs' });
                 else newInsights.push({ id: 2, type: 'optimization', message: 'Network Operating Optimally', action: 'View Metrics' });
-                setInsights(newInsights);
 
+                setInsights(newInsights);
                 addLog(`Live Feed: ${processedNodes.length} nodes synced.`, "success");
 
-                // Geo Logic
                 const cachedGeo = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
                 let cacheUpdated = false;
                 const updatedNodes = [...processedNodes];
@@ -250,7 +262,7 @@ export default function Home() {
                     }
                     if (cacheUpdated) localStorage.setItem(CACHE_KEY, JSON.stringify(cachedGeo));
                     setNodes([...updatedNodes]);
-                    
+
                     const sortedIsp = Object.entries(ispCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
                     setIspData(sortedIsp);
                 };
@@ -270,22 +282,15 @@ export default function Home() {
         return () => clearInterval(interval);
     }, [addLog]);
 
-    // --- PERFORMANCE FIX: STABLE REFERENCES ---
-    
-    // 1. Node listesini harita için filtrele ve hafızada tut (Memoize)
-    // Sadece 'nodes' verisi değişirse yeniden hesapla.
     const mapNodes = useMemo(() => {
         return nodes.filter(n => n.lat !== 0);
     }, [nodes]);
 
-    // 2. Click Handler'ı sabitle (Callback)
-    // Bu fonksiyon her renderda yeniden yaratılmayacak.
     const handleNodeClick = useCallback((node: any) => {
         setSelectedNode(node);
         setUiVisible(true);
     }, []);
 
-    // 3. UI Filters
     const displayedNodes = useMemo(() => {
         if (!filter) return nodes;
         const lower = filter.toLowerCase();
@@ -301,7 +306,6 @@ export default function Home() {
     return (
         <main className="relative w-full h-screen bg-[#02040a] overflow-hidden text-white font-sans selection:bg-cyan-500/30">
             
-            {/* HARİTA: Artık sadece 'mapNodes' değişince render olacak */}
             <div className={`absolute inset-0 z-0 transition-all duration-1000 ${viewMode === 'analyst' ? 'opacity-20 blur-sm scale-105' : 'opacity-100'}`}>
                 <GlobeViz nodes={mapNodes} onNodeClick={handleNodeClick} />
             </div>
@@ -330,6 +334,7 @@ export default function Home() {
                 {uiVisible ? <EyeOff size={20}/> : <Eye size={20}/>}
             </button>
 
+            {/* MONITOR MODE SIDEBAR */}
             {viewMode === 'monitor' && uiVisible && (
                 <div className="absolute top-40 right-6 w-80 flex flex-col gap-4 z-40 pointer-events-auto animate-in slide-in-from-right-10">
                     <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl">
@@ -359,6 +364,7 @@ export default function Home() {
                 </div>
             )}
 
+            {/* ANALYST MODE DASHBOARD */}
             {viewMode === 'analyst' && (
                 <div className="absolute inset-0 z-40 pt-32 px-6 pb-6 overflow-y-auto custom-scrollbar bg-[#050505]/90 backdrop-blur-md animate-in fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pointer-events-auto max-w-[1600px] mx-auto">
@@ -367,10 +373,11 @@ export default function Home() {
                             <StatCard title="Avg Latency" value="~400ms" sub="On Target" color="text-cyan-400" icon={<Activity size={16}/>} />
                             <StatCard title="Low XRI Nodes" value={riskStats.critical.toString()} sub="Needs Analysis" color={riskStats.critical > 0 ? "text-red-500" : "text-gray-400"} icon={<AlertCircle size={16}/>} />
                             
-                            <div className="col-span-3 bg-[#0a0a0a] border border-white/10 rounded-xl p-4 h-56 shadow-lg">
+                            {/* HISTORICAL CHART (SUPABASE) */}
+                            <div className="col-span-3 bg-[#0a0a0a] border border-white/10 rounded-xl p-4 shadow-lg min-h-[250px]">
                                 <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Database size={14}/> Historical Network TPS (Supabase)</h3>
                                 {dbHistory.length > 0 ? (
-                                    <div className="h-full w-full -ml-2 pb-4">
+                                    <div className="h-64 w-full -ml-2 pb-4">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={dbHistory}>
                                                 <defs><linearGradient id="colorTps" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient></defs>
@@ -382,28 +389,53 @@ export default function Home() {
                                         </ResponsiveContainer>
                                     </div>
                                 ) : (
-                                    <div className="h-full flex flex-col items-center justify-center text-xs text-gray-600">
-                                        <span>Waiting for CRON job...</span>
+                                    <div className="h-64 flex flex-col items-center justify-center text-xs text-gray-600 border border-dashed border-white/10 rounded bg-white/[0.02]">
+                                        <History size={24} className="mb-2 opacity-50"/>
+                                        <span>No Historical Data Yet</span>
+                                        <span className="text-[10px] mt-1 opacity-50">Data will appear after the first CRON snapshot</span>
                                     </div>
                                 )}
                             </div>
                         </div>
-                        <div className="col-span-12 md:col-span-4 bg-[#0a0a0a] border border-white/10 rounded-xl p-5 flex flex-col shadow-lg">
+
+                        {/* ISP CONCENTRATION CHART */}
+                        <div className="col-span-12 md:col-span-4 bg-[#0a0a0a] border border-white/10 rounded-xl p-5 flex flex-col shadow-lg min-h-[250px]">
                             <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-2"><Server size={14}/> ISP Concentration</h3>
-                            <div className="flex-1 min-h-[200px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie data={ispData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                                            {ispData.map((entry, index) => <Cell key={`cell-${index}`} fill={[COLORS.brand.primary, COLORS.brand.secondary, '#6366f1', '#8b5cf6', '#ec4899'][index % 5]} />)}
-                                        </Pie>
-                                        <Tooltip contentStyle={{background: '#000', border: '1px solid #333', fontSize: '10px'}} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 mt-2">
-                                {ispData.slice(0,4).map((d,i) => (<div key={i} className="flex justify-between text-[10px] text-gray-400 border-b border-white/5 pb-1"><span>{d.name}</span><span className="font-mono text-white">{d.value.toFixed(1)}M</span></div>))}
-                            </div>
+                            
+                            {ispData.length > 0 ? (
+                                <>
+                                    {/* FIXED HEIGHT FOR CHART */}
+                                    <div className="h-64 w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie data={ispData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
+                                                    {ispData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS.pie[index % COLORS.pie.length]} />)}
+                                                </Pie>
+                                                <Tooltip 
+                                                    contentStyle={{background: '#000', border: '1px solid #333', fontSize: '10px'}} 
+                                                    formatter={(value: number) => `${value.toFixed(1)}M SOL`}
+                                                />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 mt-2">
+                                        {ispData.slice(0,4).map((d,i) => (
+                                            <div key={i} className="flex justify-between text-[10px] text-gray-400 border-b border-white/5 pb-1">
+                                                <span className="truncate w-24" title={d.name}>{d.name}</span>
+                                                <span className="font-mono text-white" style={{color: COLORS.pie[i]}}>{d.value.toFixed(1)}M</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex-1 flex flex-col items-center justify-center text-xs text-gray-600 h-64 border border-dashed border-white/10 rounded bg-white/[0.02]">
+                                    <RefreshCw size={24} className="mb-2 opacity-50 animate-spin"/>
+                                    <span>Resolving Geo Data...</span>
+                                </div>
+                            )}
                         </div>
+
+                        {/* NODE TABLE */}
                         <div className="col-span-12 bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-xl min-h-[500px] flex flex-col">
                             <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
                                 <h2 className="text-sm font-bold text-white flex items-center gap-2"><Database size={16} className="text-cyan-500"/> REAL-TIME NODE MATRIX</h2>
