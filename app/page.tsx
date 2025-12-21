@@ -18,7 +18,8 @@ import {
     Globe as GlobeIcon, Search, ArrowUpRight, Eye, EyeOff, 
     AlertCircle, BrainCircuit, Terminal as TerminalIcon, History, 
     Cpu, Layers, Zap, Server, AlertTriangle, Scale, RefreshCw,
-    Star, Bell, Mail, Send, Download, HelpCircle, Grid, Signal
+    Star, Bell, Mail, Send, Download, HelpCircle, Grid, Signal,
+    ChevronUp, ChevronDown, ArrowUpDown
 } from 'lucide-react';
 
 import { 
