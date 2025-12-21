@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * XANDEUM.OS v8.0 - FUNCTIONAL PERFECTION
+ * XANDEUM.OS v9.0 - PURE DATA EDITION
  * * CHANGES:
- * - REMOVED: ISP/Geo-IP Fetching (Removed external API dependency).
- * - ADDED: "Client Version Distribution" Chart (Replaces ISP Chart).
- * - UPDATED: Monitor Mode now has a functional "Live Node List" instead of empty logs.
- * - OPTIMIZED: Zero "fake" loading states. All data is real RPC data.
+ * - REMOVED: GlobeViz from "Monitor" mode completely.
+ * - ADDED: "Node Health Matrix" in Monitor mode (Full-screen functional grid).
+ * - ADDED: "Cluster Status" panels for instant health checks.
+ * - OPTIMIZED: UI is now 100% data-focused in Monitor mode.
  */
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
@@ -15,13 +15,12 @@ import dynamic from 'next/dynamic';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { 
-    Activity, X, MapPin, Wifi, Shield, Database, LayoutDashboard, 
+    Activity, X, MapPin, Shield, Database, LayoutDashboard, 
     Globe as GlobeIcon, Search, ArrowUpRight, Eye, EyeOff, 
-    AlertCircle, TrendingUp, DollarSign, 
-    BrainCircuit, Terminal as TerminalIcon, History, 
+    AlertCircle, TrendingUp, BrainCircuit, Terminal as TerminalIcon, History, 
     Cpu, Layers, Zap, Server, AlertTriangle, Scale, RefreshCw,
     Filter, ArrowUpDown, ChevronUp, ChevronDown, Star, Bell, Mail, Send,
-    Download, HelpCircle, List, BarChart3
+    Download, HelpCircle, Grid, PlayCircle, PauseCircle
 } from 'lucide-react';
 
 import { 
@@ -29,9 +28,10 @@ import {
     YAxis, XAxis, PieChart, Pie, Cell
 } from 'recharts';
 
+// Globe is ONLY loaded for Analyst/MyNodes modes now
 const GlobeViz = dynamic(() => import('../components/GlobeViz'), { 
     ssr: false,
-    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse tracking-widest text-xs">ESTABLISHING UPLINK...</div>
+    loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono text-xs">LOADING GEO-DATA...</div>
 });
 
 const RPC_ENDPOINT = "https://api.devnet.xandeum.com:8899";
@@ -140,12 +140,19 @@ export default function Home() {
     // Metrics
     const [metrics, setMetrics] = useState({ epoch: 0, slot: 0, tps: 0, activeStake: 0 });
     const [insights, setInsights] = useState<Insight[]>([]);
+    const [logs, setLogs] = useState<string[]>([]);
     
     // Data
     const [dbHistory, setDbHistory] = useState<any[]>([]);
-    const [versionData, setVersionData] = useState<any[]>([]); // New Replacement for ISP
+    const [versionData, setVersionData] = useState<any[]>([]);
     
     const processingRef = useRef(false);
+
+    // Logs Helper
+    const addLog = useCallback((msg: string, type: 'info' | 'alert' | 'success' = 'info') => {
+        const time = new Date().toLocaleTimeString([], {hour12: false});
+        setLogs(prev => [`[${type.toUpperCase()}] ${msg} (${time})`, ...prev].slice(0, 50));
+    }, []);
 
     // Load Watched Nodes
     useEffect(() => {
@@ -185,6 +192,8 @@ export default function Home() {
                 const target = nodes.find(n => n.pubkey === nodeParam);
                 if (target) {
                     setSelectedNode(target);
+                    // Automatically switch to Analyst mode if a node is selected from URL deep link for better detail view
+                    if (viewMode === 'monitor') setViewMode('analyst');
                     setUiVisible(true);
                 }
             }
@@ -266,14 +275,12 @@ export default function Home() {
                     const prod = production?.value.byIdentity[rawNode.pubkey] || null;
                     if (vote) totalStake += vote.activatedStake;
 
-                    // Version Counting
                     const ver = rawNode.version ? rawNode.version.split(' ')[0] : 'Unknown';
                     versionCounts[ver] = (versionCounts[ver] || 0) + 1;
 
                     const m = calculateRealMetrics({ vote, production: prod, gossip: rawNode.gossip }, epochInfo?.absoluteSlot || 0);
 
-                    // Fake Geo for visual distribution (Since we removed ISP API)
-                    // This spreads nodes randomly on the globe to keep the "Visual" element alive without API calls
+                    // Pseudo-Geo for visual distribution in Analyst mode
                     const pseudoLat = (parseInt(rawNode.pubkey.slice(0, 2), 16) % 160) - 80;
                     const pseudoLng = (parseInt(rawNode.pubkey.slice(2, 4), 16) % 360) - 180;
 
@@ -301,21 +308,24 @@ export default function Home() {
                 setNodes(processedNodes);
                 setMetrics(prev => ({ ...prev, activeStake: totalStake }));
                 
-                // Prepare Version Data for Chart
                 const vData = Object.entries(versionCounts)
                     .map(([name, value]) => ({ name, value }))
                     .sort((a, b) => b.value - a.value)
                     .slice(0, 6);
                 setVersionData(vData);
 
-                // Insights Logic
                 const newInsights: Insight[] = [];
-                if (realTPS < 1000) newInsights.push({ id: 2, type: 'warning', message: `Low TPS detected (${realTPS.toFixed(0)})`, action: 'Check Leader Logs' });
-                else newInsights.push({ id: 2, type: 'optimization', message: 'Network Performance Optimal', action: 'View Metrics' });
+                if (realTPS < 1000) newInsights.push({ id: 2, type: 'warning', message: `TPS Below Target (${realTPS.toFixed(0)})`, action: 'Monitor Throughput' });
+                else newInsights.push({ id: 2, type: 'optimization', message: 'System Optimal', action: 'View Details' });
+                const critNodes = processedNodes.filter(n => n.xriScore < 50).length;
+                if(critNodes > 0) newInsights.push({ id: 3, type: 'critical', message: `${critNodes} Nodes Critical`, action: 'Investigate' });
+                
                 setInsights(newInsights);
+                addLog(`Cluster Sync: ${processedNodes.length} nodes active.`, "success");
 
             } catch (e: any) {
                 console.error("RPC Error", e);
+                addLog(`Sync Failed: ${e.message}`, "alert");
             }
         };
 
@@ -324,11 +334,11 @@ export default function Home() {
             setMetrics(prev => ({ ...prev, slot: prev.slot + 1 }));
         }, 400);
         return () => clearInterval(interval);
-    }, []);
+    }, [addLog]);
 
-    // --- DATA PROCESSING ---
+    // --- LOGIC ---
 
-    const mapNodes = useMemo(() => nodes, [nodes]); // Show all nodes with pseudo-geo
+    const mapNodes = useMemo(() => nodes, [nodes]); 
 
     const handleNodeClick = useCallback((node: any) => {
         setSelectedNode(node);
@@ -379,18 +389,33 @@ export default function Home() {
     return (
         <main className="relative w-full h-screen bg-[#02040a] overflow-hidden text-white font-sans selection:bg-cyan-500/30">
             
-            <div className={`absolute inset-0 z-0 transition-all duration-1000 ${viewMode !== 'monitor' ? 'opacity-20 blur-sm scale-105' : 'opacity-100'}`}>
-                <GlobeViz nodes={mapNodes} onNodeClick={handleNodeClick} />
-            </div>
+            {/* BACKGROUND: Globe only visible in Analyst/MyNodes mode */}
+            {viewMode !== 'monitor' && (
+                <div className="absolute inset-0 z-0 opacity-20 blur-sm scale-105 transition-all duration-1000">
+                    <GlobeViz nodes={mapNodes} onNodeClick={handleNodeClick} />
+                </div>
+            )}
 
-            {/* HEADER */}
+            {/* MONITOR MODE BACKGROUND: FUNCTIONAL GRID */}
+            {viewMode === 'monitor' && (
+                <div className="absolute inset-0 z-0 flex items-center justify-center p-20 opacity-30">
+                    <div className="w-full h-full border border-white/5 rounded-3xl grid grid-cols-12 gap-1 p-4 bg-black/40">
+                       {/* This is a subtle background grid for aesthetic depth */}
+                       {Array.from({ length: 144 }).map((_, i) => (
+                           <div key={i} className="bg-white/5 rounded-sm"></div>
+                       ))}
+                    </div>
+                </div>
+            )}
+
+            {/* TOP BAR */}
             <div className={`absolute top-0 left-0 w-full p-6 z-50 flex justify-between items-start transition-opacity duration-300 ${uiVisible ? 'opacity-100' : 'opacity-0'}`}>
                 <div className="flex flex-col gap-4">
                     <h1 className="text-4xl font-black tracking-tighter text-white drop-shadow-2xl flex items-center gap-2 select-none">
-                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">v8.0</span>
+                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">v9.0</span>
                     </h1>
                     <div className="flex bg-white/5 rounded-lg p-1 border border-white/10 backdrop-blur-md w-fit shadow-xl pointer-events-auto">
-                        <TabButton active={viewMode === 'monitor'} onClick={() => setViewMode('monitor')} icon={<GlobeIcon size={14}/>} label="MONITOR" />
+                        <TabButton active={viewMode === 'monitor'} onClick={() => setViewMode('monitor')} icon={<Grid size={14}/>} label="MONITOR" />
                         <TabButton active={viewMode === 'analyst'} onClick={() => setViewMode('analyst')} icon={<LayoutDashboard size={14}/>} label="ANALYST" />
                         <TabButton active={viewMode === 'mynodes'} onClick={() => setViewMode('mynodes')} icon={<Star size={14} className={watchedPubkeys.length > 0 ? "fill-current text-yellow-400" : ""}/>} label={`MY NODES (${watchedPubkeys.length})`} />
                     </div>
@@ -409,49 +434,85 @@ export default function Home() {
                 {uiVisible ? <EyeOff size={20}/> : <Eye size={20}/>}
             </button>
 
-            {/* MONITOR SIDEBAR (REPLACED LOGS WITH LIVE LIST) */}
-            {viewMode === 'monitor' && uiVisible && (
-                <div className="absolute top-40 right-6 w-80 flex flex-col gap-4 z-40 pointer-events-auto animate-in slide-in-from-right-10">
-                    <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-                        <div className="p-3 border-b border-white/10 bg-gradient-to-r from-cyan-900/20 to-transparent flex justify-between items-center">
-                            <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2"><BrainCircuit size={14}/> Insights</h3>
-                            <span className="text-[10px] bg-cyan-500/20 px-1.5 py-0.5 rounded text-cyan-300">{insights.length}</span>
-                        </div>
-                        <div className="p-3 space-y-2">
-                            {insights.map(insight => (
-                                <div key={insight.id} className="bg-white/5 p-3 rounded-lg border border-white/5 hover:border-cyan-500/30 transition group cursor-pointer">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        {insight.type === 'critical' ? <AlertTriangle size={12} className="text-red-500"/> : <Zap size={12} className="text-yellow-500"/>}
-                                        <span className={`text-[10px] font-bold uppercase ${insight.type === 'critical' ? 'text-red-400' : 'text-yellow-400'}`}>{insight.type}</span>
+            {/* --- MONITOR MODE: THE HEALTH MATRIX (REPLACEMENT FOR GLOBE) --- */}
+            {viewMode === 'monitor' && (
+                <div className="absolute inset-0 z-40 pt-32 px-6 pb-6 overflow-y-auto custom-scrollbar bg-[#02040a] animate-in fade-in">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 max-w-[1800px] mx-auto">
+                        
+                        {/* LEFT: STATUS & LOGS */}
+                        <div className="col-span-12 md:col-span-3 flex flex-col gap-6">
+                            {/* Health Overview */}
+                            <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-5 shadow-xl">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Activity size={14}/> Network Status</h3>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center bg-green-500/10 p-3 rounded border border-green-500/20">
+                                        <span className="text-xs text-green-400 font-bold">HEALTHY NODES</span>
+                                        <span className="text-lg font-mono text-white">{riskStats.healthy}</span>
                                     </div>
-                                    <div className="text-xs text-gray-200 font-medium leading-tight mb-2">{insight.message}</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    {/* LIVE NODE FEED LIST */}
-                    <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl h-[400px] flex flex-col">
-                        <div className="p-3 border-b border-white/10 flex justify-between items-center">
-                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Activity size={14}/> Active Feed</h3>
-                            <span className="text-[10px] text-gray-500">{nodes.length} Nodes</span>
-                        </div>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
-                            {nodes.slice(0, 50).map((node) => (
-                                <div key={node.pubkey} onClick={() => handleNodeClick(node)} className="flex items-center gap-3 p-2 hover:bg-white/5 rounded cursor-pointer group transition">
-                                    <div className="w-2 h-2 rounded-full" style={{backgroundColor: node.xriScore > 50 ? '#10b981' : '#ef4444'}}></div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-xs font-bold text-white truncate">{node.name}</div>
-                                        <div className="text-[10px] text-gray-500 truncate font-mono">{node.pubkey.slice(0,12)}...</div>
+                                    <div className="flex justify-between items-center bg-yellow-500/10 p-3 rounded border border-yellow-500/20">
+                                        <span className="text-xs text-yellow-400 font-bold">WARNING</span>
+                                        <span className="text-lg font-mono text-white">{riskStats.warning}</span>
                                     </div>
-                                    <div className="text-[10px] font-mono text-cyan-500 opacity-0 group-hover:opacity-100">VIEW</div>
+                                    <div className="flex justify-between items-center bg-red-500/10 p-3 rounded border border-red-500/20">
+                                        <span className="text-xs text-red-400 font-bold">CRITICAL</span>
+                                        <span className="text-lg font-mono text-white">{riskStats.critical}</span>
+                                    </div>
                                 </div>
-                            ))}
+                            </div>
+
+                            {/* Live Logs */}
+                            <div className="flex-1 bg-[#0a0a0a] border border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-xl min-h-[300px]">
+                                <div className="p-3 border-b border-white/10 bg-white/5"><h3 className="text-xs font-bold text-gray-400 uppercase flex items-center gap-2"><TerminalIcon size={14}/> System Log</h3></div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1 font-mono">
+                                    {logs.map((log, i) => (
+                                        <div key={i} className={`text-[10px] truncate border-b border-white/5 pb-1 ${log.includes('ALERT') ? 'text-red-400' : 'text-gray-500'}`}>
+                                            <span className="opacity-30 mr-2">{'>'}</span>{log}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
+
+                        {/* CENTER & RIGHT: THE MATRIX */}
+                        <div className="col-span-12 md:col-span-9 bg-[#0a0a0a] border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-sm font-bold text-white flex items-center gap-2"><Grid size={16} className="text-cyan-500"/> NODE HEALTH MATRIX</h3>
+                                <div className="flex gap-2 text-[10px] text-gray-500">
+                                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-green-500"></div> Optimal</span>
+                                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-yellow-500"></div> Degraded</span>
+                                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-red-500"></div> Critical</span>
+                                </div>
+                            </div>
+                            
+                            {/* The Grid */}
+                            <div className="flex-1 bg-black/40 rounded-xl p-4 overflow-y-auto custom-scrollbar border border-white/5">
+                                <div className="flex flex-wrap gap-1 content-start">
+                                    {nodes.map((node) => (
+                                        <div 
+                                            key={node.pubkey}
+                                            onClick={() => handleNodeClick(node)}
+                                            className={`w-3 h-3 md:w-4 md:h-4 rounded-sm cursor-pointer transition hover:scale-125 hover:z-10 relative group ${
+                                                node.xriScore >= 80 ? 'bg-green-500/50 hover:bg-green-400' : 
+                                                node.xriScore >= 50 ? 'bg-yellow-500/50 hover:bg-yellow-400' : 
+                                                'bg-red-500/50 hover:bg-red-400'
+                                            }`}
+                                        >
+                                            {/* Hover Tooltip for Grid Item */}
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-20 bg-black border border-white/20 p-2 rounded w-32 pointer-events-none">
+                                                <div className="text-[10px] font-bold text-white truncate">{node.name}</div>
+                                                <div className="text-[9px] text-gray-400">XRI: {node.xriScore}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             )}
 
-            {/* ANALYST & MY NODES DASHBOARD */}
+            {/* --- ANALYST & MY NODES MODE --- */}
             {(viewMode === 'analyst' || viewMode === 'mynodes') && (
                 <div className="absolute inset-0 z-40 pt-32 px-6 pb-6 overflow-y-auto custom-scrollbar bg-[#050505]/95 backdrop-blur-md animate-in fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pointer-events-auto max-w-[1600px] mx-auto">
@@ -505,7 +566,7 @@ export default function Home() {
                                     </div>
                                 </div>
                                 
-                                {/* NEW REPLACEMENT FOR ISP CHART: CLIENT VERSIONS */}
+                                {/* REPLACEMENT: CLIENT VERSIONS CHART */}
                                 <div className="col-span-12 md:col-span-4 bg-[#0a0a0a] border border-white/10 rounded-xl p-5 flex flex-col shadow-lg min-h-[280px]">
                                     <div className="flex justify-between items-center mb-2">
                                         <h3 className="text-xs font-bold text-gray-400 uppercase flex items-center gap-2"><Layers size={14}/> Client Diversity</h3>
@@ -654,7 +715,7 @@ export default function Home() {
     );
 }
 
-// UI COMPONENTS (Minified for brevity but functional)
+// UI COMPONENTS
 function TabButton({ active, onClick, icon, label }: any) { return <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold tracking-wider transition-all ${active ? 'bg-cyan-500 text-black shadow-glow' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>{icon} {label}</button>; }
 function MetricBox({ label, value, sub, color = "text-white" }: any) { return <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl px-4 py-2 flex flex-col min-w-[100px] hover:border-cyan-500/30 transition"><span className="text-[9px] text-gray-500 uppercase font-bold tracking-wider">{label}</span><div className={`text-lg font-bold leading-none mt-1 ${color}`}>{value} <span className="text-[10px] text-gray-600 font-normal ml-1">{sub}</span></div></div>; }
 function StatCard({ title, value, sub, color, icon, action }: any) { return <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-4 flex flex-col justify-between shadow-lg h-full"><div className="flex justify-between items-start"><div><div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{title}</div><div className={`text-2xl font-bold ${color}`}>{value}</div><div className="text-[10px] text-gray-600 mt-1">{sub}</div></div><div className="p-3 bg-white/5 rounded-lg text-gray-400">{icon}</div></div>{action && <div className="mt-3 pt-3 border-t border-white/5">{action}</div>}</div>; }
