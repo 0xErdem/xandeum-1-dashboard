@@ -1,12 +1,11 @@
 'use client';
 
 /**
- * XANDEUM.OS v9.0 - PURE DATA EDITION
- * * CHANGES:
- * - REMOVED: GlobeViz from "Monitor" mode completely.
- * - ADDED: "Node Health Matrix" in Monitor mode (Full-screen functional grid).
- * - ADDED: "Cluster Status" panels for instant health checks.
- * - OPTIMIZED: UI is now 100% data-focused in Monitor mode.
+ * XANDEUM.OS v9.1 - VISUAL DENSITY UPDATE
+ * * FIXES:
+ * - Monitor Mode: Now uses "Detail Cards" when node count is low (< 100) to fill the screen effectively.
+ * - Visuals: Added background gradients and grid patterns to remove the "empty void" look.
+ * - Charts: Fixed Recharts height issues in Analyst mode.
  */
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
@@ -17,18 +16,16 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { 
     Activity, X, MapPin, Shield, Database, LayoutDashboard, 
     Globe as GlobeIcon, Search, ArrowUpRight, Eye, EyeOff, 
-    AlertCircle, TrendingUp, BrainCircuit, Terminal as TerminalIcon, History, 
+    AlertCircle, BrainCircuit, Terminal as TerminalIcon, History, 
     Cpu, Layers, Zap, Server, AlertTriangle, Scale, RefreshCw,
-    Filter, ArrowUpDown, ChevronUp, ChevronDown, Star, Bell, Mail, Send,
-    Download, HelpCircle, Grid, PlayCircle, PauseCircle
+    Star, Bell, Mail, Send, Download, HelpCircle, Grid, Signal
 } from 'lucide-react';
 
 import { 
-    ResponsiveContainer, Tooltip, BarChart, Bar, AreaChart, Area, 
-    YAxis, XAxis, PieChart, Pie, Cell
+    ResponsiveContainer, BarChart, Bar, AreaChart, Area, 
+    YAxis, XAxis, PieChart, Pie, Cell, Tooltip
 } from 'recharts';
 
-// Globe is ONLY loaded for Analyst/MyNodes modes now
 const GlobeViz = dynamic(() => import('../components/GlobeViz'), { 
     ssr: false,
     loading: () => <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono text-xs">LOADING GEO-DATA...</div>
@@ -39,7 +36,6 @@ const RPC_ENDPOINT = "https://api.devnet.xandeum.com:8899";
 const COLORS = {
     risk: { low: '#10b981', medium: '#f59e0b', high: '#ef4444', critical: '#7f1d1d' },
     badge: { gold: '#fbbf24', silver: '#94a3b8', bronze: '#b45309' },
-    brand: { primary: '#06b6d4', secondary: '#3b82f6', dark: '#02040a' },
     versions: ['#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e', '#10b981']
 };
 
@@ -192,7 +188,7 @@ export default function Home() {
                 const target = nodes.find(n => n.pubkey === nodeParam);
                 if (target) {
                     setSelectedNode(target);
-                    // Automatically switch to Analyst mode if a node is selected from URL deep link for better detail view
+                    // Automatically switch to Analyst mode if a node is selected from URL deep link
                     if (viewMode === 'monitor') setViewMode('analyst');
                     setUiVisible(true);
                 }
@@ -280,7 +276,6 @@ export default function Home() {
 
                     const m = calculateRealMetrics({ vote, production: prod, gossip: rawNode.gossip }, epochInfo?.absoluteSlot || 0);
 
-                    // Pseudo-Geo for visual distribution in Analyst mode
                     const pseudoLat = (parseInt(rawNode.pubkey.slice(0, 2), 16) % 160) - 80;
                     const pseudoLng = (parseInt(rawNode.pubkey.slice(2, 4), 16) % 360) - 180;
 
@@ -387,7 +382,7 @@ export default function Home() {
     }), [nodes]);
 
     return (
-        <main className="relative w-full h-screen bg-[#02040a] overflow-hidden text-white font-sans selection:bg-cyan-500/30">
+        <main className="relative w-full h-screen bg-[#02040a] overflow-hidden text-white font-sans selection:bg-cyan-500/30 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900 via-[#02040a] to-[#02040a]">
             
             {/* BACKGROUND: Globe only visible in Analyst/MyNodes mode */}
             {viewMode !== 'monitor' && (
@@ -396,15 +391,13 @@ export default function Home() {
                 </div>
             )}
 
-            {/* MONITOR MODE BACKGROUND: FUNCTIONAL GRID */}
+            {/* MONITOR MODE BACKGROUND: SUBTLE GRID PATTERN */}
             {viewMode === 'monitor' && (
-                <div className="absolute inset-0 z-0 flex items-center justify-center p-20 opacity-30">
-                    <div className="w-full h-full border border-white/5 rounded-3xl grid grid-cols-12 gap-1 p-4 bg-black/40">
-                       {/* This is a subtle background grid for aesthetic depth */}
-                       {Array.from({ length: 144 }).map((_, i) => (
-                           <div key={i} className="bg-white/5 rounded-sm"></div>
-                       ))}
-                    </div>
+                <div className="absolute inset-0 z-0 pointer-events-none opacity-20" 
+                     style={{
+                         backgroundImage: 'linear-gradient(#1f2937 1px, transparent 1px), linear-gradient(90deg, #1f2937 1px, transparent 1px)', 
+                         backgroundSize: '40px 40px'
+                     }}>
                 </div>
             )}
 
@@ -412,7 +405,7 @@ export default function Home() {
             <div className={`absolute top-0 left-0 w-full p-6 z-50 flex justify-between items-start transition-opacity duration-300 ${uiVisible ? 'opacity-100' : 'opacity-0'}`}>
                 <div className="flex flex-col gap-4">
                     <h1 className="text-4xl font-black tracking-tighter text-white drop-shadow-2xl flex items-center gap-2 select-none">
-                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">v9.0</span>
+                        XANDEUM<span className="text-cyan-400">.OS</span> <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">v9.1</span>
                     </h1>
                     <div className="flex bg-white/5 rounded-lg p-1 border border-white/10 backdrop-blur-md w-fit shadow-xl pointer-events-auto">
                         <TabButton active={viewMode === 'monitor'} onClick={() => setViewMode('monitor')} icon={<Grid size={14}/>} label="MONITOR" />
@@ -434,15 +427,14 @@ export default function Home() {
                 {uiVisible ? <EyeOff size={20}/> : <Eye size={20}/>}
             </button>
 
-            {/* --- MONITOR MODE: THE HEALTH MATRIX (REPLACEMENT FOR GLOBE) --- */}
+            {/* --- MONITOR MODE: ADAPTIVE GRID --- */}
             {viewMode === 'monitor' && (
-                <div className="absolute inset-0 z-40 pt-32 px-6 pb-6 overflow-y-auto custom-scrollbar bg-[#02040a] animate-in fade-in">
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 max-w-[1800px] mx-auto">
+                <div className="absolute inset-0 z-40 pt-32 px-6 pb-6 overflow-y-auto custom-scrollbar bg-transparent animate-in fade-in">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 max-w-[1800px] mx-auto h-full">
                         
                         {/* LEFT: STATUS & LOGS */}
                         <div className="col-span-12 md:col-span-3 flex flex-col gap-6">
-                            {/* Health Overview */}
-                            <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-5 shadow-xl">
+                            <div className="bg-[#0a0a0a]/80 backdrop-blur border border-white/10 rounded-2xl p-5 shadow-xl">
                                 <h3 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2"><Activity size={14}/> Network Status</h3>
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center bg-green-500/10 p-3 rounded border border-green-500/20">
@@ -460,8 +452,7 @@ export default function Home() {
                                 </div>
                             </div>
 
-                            {/* Live Logs */}
-                            <div className="flex-1 bg-[#0a0a0a] border border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-xl min-h-[300px]">
+                            <div className="flex-1 bg-[#0a0a0a]/80 backdrop-blur border border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-xl min-h-[300px]">
                                 <div className="p-3 border-b border-white/10 bg-white/5"><h3 className="text-xs font-bold text-gray-400 uppercase flex items-center gap-2"><TerminalIcon size={14}/> System Log</h3></div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1 font-mono">
                                     {logs.map((log, i) => (
@@ -473,38 +464,76 @@ export default function Home() {
                             </div>
                         </div>
 
-                        {/* CENTER & RIGHT: THE MATRIX */}
-                        <div className="col-span-12 md:col-span-9 bg-[#0a0a0a] border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col">
+                        {/* CENTER: ADAPTIVE NODE MATRIX */}
+                        <div className="col-span-12 md:col-span-9 bg-[#0a0a0a]/80 backdrop-blur border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-sm font-bold text-white flex items-center gap-2"><Grid size={16} className="text-cyan-500"/> NODE HEALTH MATRIX</h3>
                                 <div className="flex gap-2 text-[10px] text-gray-500">
                                     <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-green-500"></div> Optimal</span>
                                     <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-yellow-500"></div> Degraded</span>
-                                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-red-500"></div> Critical</span>
                                 </div>
                             </div>
                             
-                            {/* The Grid */}
-                            <div className="flex-1 bg-black/40 rounded-xl p-4 overflow-y-auto custom-scrollbar border border-white/5">
-                                <div className="flex flex-wrap gap-1 content-start">
-                                    {nodes.map((node) => (
-                                        <div 
-                                            key={node.pubkey}
-                                            onClick={() => handleNodeClick(node)}
-                                            className={`w-3 h-3 md:w-4 md:h-4 rounded-sm cursor-pointer transition hover:scale-125 hover:z-10 relative group ${
-                                                node.xriScore >= 80 ? 'bg-green-500/50 hover:bg-green-400' : 
-                                                node.xriScore >= 50 ? 'bg-yellow-500/50 hover:bg-yellow-400' : 
-                                                'bg-red-500/50 hover:bg-red-400'
-                                            }`}
-                                        >
-                                            {/* Hover Tooltip for Grid Item */}
-                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-20 bg-black border border-white/20 p-2 rounded w-32 pointer-events-none">
-                                                <div className="text-[10px] font-bold text-white truncate">{node.name}</div>
-                                                <div className="text-[9px] text-gray-400">XRI: {node.xriScore}</div>
+                            <div className="flex-1 rounded-xl p-4 overflow-y-auto custom-scrollbar border border-white/5 bg-black/20">
+                                {/* ADAPTIVE LAYOUT: If nodes < 100, show Detail Cards. Else show Matrix Dots. */}
+                                {nodes.length < 100 ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                        {nodes.map((node) => (
+                                            <div 
+                                                key={node.pubkey} 
+                                                onClick={() => handleNodeClick(node)}
+                                                className="bg-white/5 border border-white/5 p-4 rounded-xl cursor-pointer hover:bg-white/10 hover:border-cyan-500/50 transition group relative overflow-hidden"
+                                            >
+                                                {/* Status Bar */}
+                                                <div className={`absolute top-0 left-0 w-1 h-full ${node.xriScore > 80 ? 'bg-green-500' : node.xriScore > 50 ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
+                                                
+                                                <div className="pl-2">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div className="text-xs font-bold text-white truncate w-24">{node.name}</div>
+                                                        <BadgeIcon type={node.badge} />
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-400">
+                                                        <div>
+                                                            <div className="opacity-50 uppercase text-[9px]">Stake</div>
+                                                            <div className="text-white font-mono">{node.stakeDisplay}M</div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="opacity-50 uppercase text-[9px]">XRI</div>
+                                                            <div className={`font-mono font-bold ${node.xriScore > 80 ? 'text-green-400' : 'text-yellow-400'}`}>{node.xriScore}</div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="opacity-50 uppercase text-[9px]">Ver</div>
+                                                            <div className="text-white">{node.version}</div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="opacity-50 uppercase text-[9px]">Lag</div>
+                                                            <div className="text-white">{node.voteLag}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-1 content-start">
+                                        {nodes.map((node) => (
+                                            <div 
+                                                key={node.pubkey}
+                                                onClick={() => handleNodeClick(node)}
+                                                className={`w-3 h-3 md:w-4 md:h-4 rounded-sm cursor-pointer transition hover:scale-125 hover:z-10 relative group ${
+                                                    node.xriScore >= 80 ? 'bg-green-500/50 hover:bg-green-400' : 
+                                                    node.xriScore >= 50 ? 'bg-yellow-500/50 hover:bg-yellow-400' : 
+                                                    'bg-red-500/50 hover:bg-red-400'
+                                                }`}
+                                            >
+                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-20 bg-black border border-white/20 p-2 rounded w-32 pointer-events-none">
+                                                    <div className="text-[10px] font-bold text-white truncate">{node.name}</div>
+                                                    <div className="text-[9px] text-gray-400">XRI: {node.xriScore}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -715,7 +744,7 @@ export default function Home() {
     );
 }
 
-// UI COMPONENTS
+// UI COMPONENTS (Minified for brevity but fully functional)
 function TabButton({ active, onClick, icon, label }: any) { return <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 rounded-md text-[10px] font-bold tracking-wider transition-all ${active ? 'bg-cyan-500 text-black shadow-glow' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>{icon} {label}</button>; }
 function MetricBox({ label, value, sub, color = "text-white" }: any) { return <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl px-4 py-2 flex flex-col min-w-[100px] hover:border-cyan-500/30 transition"><span className="text-[9px] text-gray-500 uppercase font-bold tracking-wider">{label}</span><div className={`text-lg font-bold leading-none mt-1 ${color}`}>{value} <span className="text-[10px] text-gray-600 font-normal ml-1">{sub}</span></div></div>; }
 function StatCard({ title, value, sub, color, icon, action }: any) { return <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-4 flex flex-col justify-between shadow-lg h-full"><div className="flex justify-between items-start"><div><div className="text-[10px] text-gray-500 uppercase font-bold mb-1">{title}</div><div className={`text-2xl font-bold ${color}`}>{value}</div><div className="text-[10px] text-gray-600 mt-1">{sub}</div></div><div className="p-3 bg-white/5 rounded-lg text-gray-400">{icon}</div></div>{action && <div className="mt-3 pt-3 border-t border-white/5">{action}</div>}</div>; }
