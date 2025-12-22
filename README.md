@@ -1,36 +1,112 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🌍 XANDEUM.OS | Operational Intelligence Platform
 
-## Getting Started
+> **Next-generation analytics & decision-support system for Xandeum pNodes.**
+> Moving beyond simple block explorers to provide actionable intelligence via the proprietary XRI algorithm.
 
-First, run the development server:
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2F0xErdem%2Fxandeum-1-dashboard)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+🔗 **Live Demo:** [https://xandeum-1-dashboard.vercel.app/](https://xandeum-1-dashboard.vercel.app/)  
+💻 **Repository:** [https://github.com/0xErdem/xandeum-1-dashboard](https://github.com/0xErdem/xandeum-1-dashboard)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## ⚡ The Problem vs. Our Solution
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**The Problem:** Traditional validator dashboards are often cluttered lists or simple spreadsheets. They show raw data but lack context. It is difficult for a user to instantly spot a failing node or understand the overall health of the network in a single glance.
 
-## Learn More
+**The Xandeum.OS Solution:** We treat the network as a living organism, focusing on **visual density** and **interpreted data**.
+1.  **XRI (Xandeum Reliability Index):** Instead of just showing uptime, we calculate a weighted score based on *Vote Lag*, *Block Skip Rate*, and *Efficiency*.
+2.  **Visual Matrix:** We replaced pagination with a high-density "Health Matrix" that visualizes the entire cluster status in a single view.
+3.  **Client Diversity:** We actively track software versions to help prevent single-point-of-failure risks during network upgrades.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🚀 Key Features
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 1. 🛡️ The XRI Algorithm
+A custom scoring engine (0-100) that rates node reliability in real-time.
+- **Gold Badge (90+):** Elite performance.
+- **Silver Badge (75+):** Reliable operation.
+- **Bronze Badge (50+):** Standard operation.
+- **Risk (<50):** Immediate attention required.
 
-## Deploy on Vercel
+### 2. 👁️ Monitor Mode (NOC View)
+Designed for Network Operations Centers.
+- **Adaptive Matrix Grid:** Automatically switches between "Detail Cards" (for small networks) and "Status Dots" (for large networks) to maximize screen real estate.
+- **Live Feed:** Real-time scrolling log of network events.
+- **Instant Filtering:** One-click filter to isolate "Critical" or "Warning" nodes instantly.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 3. 📊 Analyst Mode (Deep Dive)
+Designed for Researchers and Stakers.
+- **Historical Data:** Tracks TPS and Stake trends over time (powered by Supabase time-series data).
+- **Client Diversity:** Visualizes the distribution of node software versions to ensure network decentralization.
+- **Deep Linking:** Share specific node details via URL parameters (`?node=PUBKEY`).
+- **CSV Export:** Download filtered datasets for offline analysis.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 4. ⭐ My Nodes (Personalization)
+- **Watchlist:** Star your favorite nodes to create a personalized command center.
+- **Alert Simulation:** Interface for setting up email/telegram alerts for XRI drops.
+- **Local Persistence:** Your watchlist is saved locally on your device, respecting privacy.
+
+---
+
+## 🛠️ Tech Stack
+
+* **Frontend:** Next.js 14 (App Router), React, TypeScript
+* **Styling:** Tailwind CSS (Glassmorphism & Cyberpunk aesthetics)
+* **Visualization:** Recharts (Charts), React-Globe.GL (Visuals)
+* **Data Layer:** Solana Web3.js (Direct RPC calls via `getClusterNodes`, `getVoteAccounts`)
+* **Backend/History:** Supabase (PostgreSQL) for time-series data storage.
+* **Deployment:** Vercel
+
+---
+
+## 🏗️ Installation & Setup
+
+1.  **Clone the repository:**
+    ```bash
+    git clone [https://github.com/0xErdem/xandeum-1-dashboard.git](https://github.com/0xErdem/xandeum-1-dashboard.git)
+    cd xandeum-1-dashboard
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+
+3.  **Environment Variables:**
+    Create a `.env.local` file in the root directory and add your Supabase credentials (required for historical charts):
+    ```env
+    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+    ```
+
+4.  **Run Development Server:**
+    ```bash
+    npm run dev
+    ```
+
+---
+
+## 📊 Database Schema (Supabase)
+
+To enable the historical TPS chart, create the following table in your Supabase SQL Editor:
+
+```sql
+-- Create the stats table
+create table public.network_stats (
+  id bigint generated by default as identity primary key,
+  time timestamp with time zone default timezone('utc'::text, now()) not null,
+  stake numeric,
+  tps numeric,
+  node_count integer,
+  epoch integer
+);
+
+-- Enable Security
+alter table public.network_stats enable row level security;
+
+-- Policies
+create policy "Public Read" on public.network_stats for select using (true);
+create policy "Public Insert" on public.network_stats for insert with check (true);
